@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Registrar visita{% endblock %}
+{% block heading %}¿A quién atendiste?{% endblock %}
+{% block back %}<a class="back" href="{{ url_for('main.home') }}">Volver</a>{% endblock %}
+
+{% block content %}
+  <form class="search" method="get" action="{{ url_for('visits.pick_client') }}" role="search">
+    <input type="search" name="q" value="{{ term }}" autocomplete="off"
+           placeholder="Nombre, teléfono o mascota" aria-label="Buscar cliente">
+    <button type="submit" class="btn btn-sm">Buscar</button>
+  </form>
+
+  {% if rows is not none %}
+    {% if rows %}
+      <ul class="list">
+        {% for row in rows %}
+          <li>
+            <a href="{{ url_for('visits.create', client_id=row.id) }}">
+              <span class="list-title">{{ row.name }}</span>
+              <span class="list-sub">
+                {{ row.pet_names or row.phone_display or (row.phone | phone) }}
+              </span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="empty">
+        <p>Nadie coincide con «{{ term }}».</p>
+        <a class="btn" href="{{ url_for('clients.create') }}">Registrarlo como nuevo</a>
+      </div>
+    {% endif %}
+
+  {% elif recent %}
+    <h2 class="section">Últimos atendidos</h2>
+    <ul class="list">
+      {% for row in recent %}
+        <li>
+          <a href="{{ url_for('visits.create', client_id=row.id) }}">
+            <span class="list-title">{{ row.name }}</span>
+            <span class="list-sub">
+              {{ row.pet_names }}{% if row.pet_names %} · {% endif %}{{ row.last_visit_date }}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+    <a class="btn btn-ghost btn-big"
+       href="{{ url_for('clients.create') }}">Es un cliente nuevo</a>
+
+  {% else %}
+    <div class="empty">
+      <p>Todavía no hay visitas registradas. Busca al cliente arriba
+         para registrar la primera.</p>
+      <a class="btn" href="{{ url_for('clients.create') }}">Es un cliente nuevo</a>
+    </div>
+  {% endif %}
+{% endblock %}

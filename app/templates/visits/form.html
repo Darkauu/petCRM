@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% set editing = visit.id is defined and visit.id %}
+{% block title %}{{ 'Editar visita' if editing else 'Registrar visita' }}{% endblock %}
+{% block heading %}{{ client.name }}{% endblock %}
+{% block back %}
+  <a class="back" href="{{ url_for('visits.index') if editing else url_for('visits.pick_client') }}">Volver</a>
+{% endblock %}
+
+{% block content %}
+<form method="post" class="form visit" novalidate
+      action="{{ url_for('visits.edit', visit_id=visit.id) if editing else url_for('visits.create', client_id=client.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  {% if errors.lines %}<p class="flash flash-bad">{{ errors.lines }}</p>{% endif %}
+
+  {% for pet in pet_rows %}
+    <section class="pet-card">
+      <h2>
+        {{ pet.name }}
+        <small>{{ pet.size | size }}{% if pet.breed %} · {{ pet.breed }}{% endif %}</small>
+      </h2>
+      {% if pet.temperament %}
+        <p class="tag tag-warn">{{ pet.temperament }}</p>
+      {% endif %}
+
+      {% for service in service_rows %}
+        {% set cell = grid[(pet.id, service.id)] %}
+        {% set field = 'price_' ~ pet.id ~ '_' ~ service.id %}
+        {% set box = 'p' ~ pet.id ~ 's' ~ service.id %}
+        <div class="line {{ 'bad' if errors[field] }}">
+          <input class="line-check" type="checkbox" id="{{ box }}"
+                 name="pick" value="{{ pet.id }}:{{ service.id }}"
+                 {{ 'checked' if (pet.id, service.id) in picked }}>
+          <label class="line-face" for="{{ box }}">
+            {{ service.name }}
+            {% if not service.is_active %}<span class="tag">fuera del catálogo</span>{% endif %}
+          </label>
+          <span class="line-price">
+            <span class="cur">$</span>
+            {# Con un precio ilegible se devuelve tal cual lo escribio:
+               mostrar otro numero contradiria el mensaje de error. #}
+            <input name="{{ field }}" inputmode="decimal" placeholder="0.00"
+                   data-amount
+                   value="{{ request.form.get(field, '') if errors[field]
+                             else (cell.cents | money(false) if cell.cents is not none) }}">
+          </span>
+          {% if errors[field] %}<em class="line-err">{{ errors[field] }}</em>
+          {% elif cell.source == 'last' %}<em class="line-hint">último cobro</em>
+          {% elif cell.source == 'none' %}<em class="line-hint">sin precio de lista</em>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </section>
+  {% endfor %}
+
+  <details class="more" {{ 'open' if errors.visit_date or visit.notes }}>
+    <summary>Fecha y notas</summary>
+
+    <label class="field {{ 'bad' if errors.visit_date }}">
+      <span>Fecha</span>
+      <input name="visit_date" type="date" value="{{ visit.visit_date }}">
+      {% if errors.visit_date %}<em>{{ errors.visit_date }}</em>{% endif %}
+    </label>
+
+    <label class="field">
+      <span>Notas</span>
+      <textarea name="notes" rows="2">{{ visit.notes or '' }}</textarea>
+    </label>
+  </details>
+
+  <div class="totalbar">
+    <span>Total</span>
+    <strong data-total>$0.00</strong>
+  </div>
+
+  <button class="btn btn-big" type="submit">
+    {{ 'Guardar cambios' if editing else 'Guardar visita' }}
+  </button>
+</form>
+
+{% if editing %}
+  <form method="post" class="danger"
+        action="{{ url_for('visits.archive', visit_id=visit.id) }}"
+        data-confirm="¿Eliminar esta visita? Deja de contar en los totales.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-danger" type="submit">Eliminar visita</button>
+  </form>
+{% endif %}
+{% endblock %}

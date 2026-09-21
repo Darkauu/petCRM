@@ -29,3 +29,26 @@ document.querySelectorAll("form.form").forEach(function (form) {
     }, 0);
   });
 });
+
+// Total en vivo de la visita. Si el JS no corre, el servidor igual suma
+// bien: esto solo evita que el duenio tenga que sumar de cabeza.
+(function () {
+  var out = document.querySelector("[data-total]");
+  if (!out) return;
+
+  function recalc() {
+    var cents = 0;
+    document.querySelectorAll(".line").forEach(function (line) {
+      var check = line.querySelector(".line-check");
+      var amount = line.querySelector("[data-amount]");
+      if (!check || !check.checked || !amount) return;
+      var value = parseFloat((amount.value || "").replace(",", "."));
+      if (!isNaN(value) && value >= 0) cents += Math.round(value * 100);
+    });
+    out.textContent = "$" + (cents / 100).toFixed(2);
+  }
+
+  document.addEventListener("change", recalc);
+  document.addEventListener("input", recalc);
+  recalc();
+})();

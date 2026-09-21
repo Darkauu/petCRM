@@ -32,6 +32,8 @@
 <nav class="tabbar">
   <a href="{{ url_for('main.home') }}"
      class="{{ 'on' if request.endpoint == 'main.home' }}">Inicio</a>
+  <a href="{{ url_for('visits.index') }}"
+     class="{{ 'on' if request.blueprint == 'visits' }}">Visitas</a>
   <a href="{{ url_for('clients.index') }}"
      class="{{ 'on' if request.blueprint in ('clients', 'pets') }}">Clientes</a>
   <a href="{{ url_for('services.index') }}"

@@ -33,11 +33,13 @@ def _register_blueprints(app):
     from app.blueprints.main import bp as main_bp
     from app.blueprints.pets import bp as pets_bp
     from app.blueprints.services import bp as services_bp
+    from app.blueprints.visits import bp as visits_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(clients_bp)
     app.register_blueprint(pets_bp)
     app.register_blueprint(services_bp)
+    app.register_blueprint(visits_bp)
 
 
 def _register_error_handlers(app):

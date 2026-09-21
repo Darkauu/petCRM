@@ -64,6 +64,29 @@
     </div>
   {% endif %}
 
-  <a class="btn btn-big"
+  <a class="btn btn-ghost btn-big"
      href="{{ url_for('pets.create', client_id=client.id) }}">Agregar mascota</a>
+
+  <h2 class="section">Visitas</h2>
+
+  {% if visits %}
+    <ul class="list">
+      {% for row in visits %}
+        <li>
+          <a href="{{ url_for('visits.edit', visit_id=row.id) }}">
+            <span class="list-title">
+              {{ row.visit_date }}
+              <span class="amount">{{ row.total_cents | money }}</span>
+            </span>
+            <span class="list-sub">{{ row.pet_names or 'sin servicios' }}</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="hint">Todavía no hay visitas de este cliente.</p>
+  {% endif %}
+
+  <a class="btn btn-big"
+     href="{{ url_for('visits.create', client_id=client.id) }}">Registrar visita</a>
 {% endblock %}
