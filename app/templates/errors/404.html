@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}No encontrado{% endblock %}
+{% block heading %}No encontrado{% endblock %}
+{% block content %}
+  <div class="empty">
+    <p>Esa página no existe, o el registro fue archivado.</p>
+    <a class="btn" href="{{ url_for('main.home') }}">Volver al inicio</a>
+  </div>
+{% endblock %}

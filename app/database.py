@@ -5,6 +5,7 @@ lo unico que cambia es de donde sale la ruta del archivo: el resto
 de la aplicacion no se entera.
 """
 import sqlite3
+from contextlib import contextmanager
 
 from flask import current_app, g
 
@@ -46,6 +47,23 @@ def query_one(sql, params=()):
 def execute(sql, params=()):
     """INSERT/UPDATE/DELETE. Devuelve el cursor (lastrowid, rowcount)."""
     return get_db().execute(sql, params)
+
+
+@contextmanager
+def transaction():
+    """Agrupa varios execute() en una unidad.
+
+    close_db() ya hace commit al final del request; lo que falta es
+    garantizar el rollback cuando una operacion de varios pasos falla
+    a la mitad (por ejemplo servicio + sus precios). Sin esto, el
+    teardown confirmaria el trabajo incompleto.
+    """
+    db = get_db()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
 
 
 def init_app(app):

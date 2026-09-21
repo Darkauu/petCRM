@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Sesión vencida{% endblock %}
+{% block heading %}Sesión vencida{% endblock %}
+{% block content %}
+  <div class="empty">
+    <p>La página estuvo abierta demasiado tiempo y no se pudo guardar.
+       Vuelve a abrir el formulario e inténtalo de nuevo.</p>
+    <a class="btn" href="{{ url_for('main.home') }}">Volver al inicio</a>
+  </div>
+{% endblock %}

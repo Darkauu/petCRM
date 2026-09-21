@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Clientes{% endblock %}
+{% block heading %}Clientes{% endblock %}
+
+{% block content %}
+  <form class="search" method="get" action="{{ url_for('clients.index') }}" role="search">
+    <input type="search" name="q" value="{{ term }}" autocomplete="off"
+           placeholder="Nombre, teléfono o mascota" aria-label="Buscar cliente">
+    <button type="submit" class="btn btn-sm">Buscar</button>
+  </form>
+
+  {% if rows %}
+    <ul class="list">
+      {% for row in rows %}
+        <li>
+          <a href="{{ url_for('clients.detail', client_id=row.id) }}">
+            <span class="list-title">{{ row.name }}</span>
+            <span class="list-sub">
+              {{ row.phone_display or (row.phone | phone) }}
+              {%- if row.pet_names %} · {{ row.pet_names }}{% endif %}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% elif term %}
+    <div class="empty">
+      <p>Nadie coincide con «{{ term }}».</p>
+      <a class="btn" href="{{ url_for('clients.create') }}">Registrarlo como nuevo</a>
+    </div>
+  {% else %}
+    <div class="empty">
+      <p>Todavía no hay clientes registrados.</p>
+      <a class="btn" href="{{ url_for('clients.create') }}">Registrar el primero</a>
+    </div>
+  {% endif %}
+
+  <a class="fab" href="{{ url_for('clients.create') }}" aria-label="Nuevo cliente">+</a>
+{% endblock %}

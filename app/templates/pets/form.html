@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% set editing = pet.id is defined and pet.id %}
+{% block title %}{{ 'Editar mascota' if editing else 'Nueva mascota' }}{% endblock %}
+{% block heading %}{{ 'Editar mascota' if editing else 'Nueva mascota' }}{% endblock %}
+{% block back %}
+  <a class="back" href="{{ url_for('clients.detail', client_id=client.id) }}">Volver</a>
+{% endblock %}
+
+{% block content %}
+<p class="owner">Dueño: <strong>{{ client.name }}</strong></p>
+
+<form method="post" class="form" novalidate
+      action="{{ url_for('pets.edit', pet_id=pet.id) if editing else url_for('pets.create', client_id=client.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label class="field {{ 'bad' if errors.name }}">
+    <span>Nombre</span>
+    <input name="name" value="{{ pet.name or '' }}" required
+           autocapitalize="words" autofocus>
+    {% if errors.name %}<em>{{ errors.name }}</em>{% endif %}
+  </label>
+
+  <fieldset class="field pills {{ 'bad' if errors.size }}">
+    <legend>Tamaño</legend>
+    <div class="pill-row">
+      {% for key, label in SIZES %}
+        <label class="pill">
+          <input type="radio" name="size" value="{{ key }}"
+                 {{ 'checked' if pet.size == key }} required>
+          <span>{{ label }}</span>
+        </label>
+      {% endfor %}
+    </div>
+    {% if errors.size %}<em>{{ errors.size }}</em>{% endif %}
+  </fieldset>
+
+  <label class="field">
+    <span>Raza</span>
+    <input name="breed" value="{{ pet.breed or '' }}" autocapitalize="words">
+  </label>
+
+  <details class="more" {{ 'open' if errors.birthdate or errors.weight_kg }}>
+    <summary>Más datos</summary>
+
+    <label class="field">
+      <span>Manejo</span>
+      <input name="temperament" value="{{ pet.temperament or '' }}"
+             placeholder="muerde al secar, nervioso con la máquina">
+    </label>
+
+    <label class="field">
+      <span>Notas médicas</span>
+      <textarea name="medical_notes" rows="2">{{ pet.medical_notes or '' }}</textarea>
+    </label>
+
+    <fieldset class="field pills">
+      <legend>Especie</legend>
+      <div class="pill-row">
+        {% for key, label in SPECIES %}
+          <label class="pill">
+            <input type="radio" name="species" value="{{ key }}"
+                   {{ 'checked' if (pet.species or 'dog') == key }}>
+            <span>{{ label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="field pills">
+      <legend>Sexo</legend>
+      <div class="pill-row">
+        {% for key, label in SEXES %}
+          <label class="pill">
+            <input type="radio" name="sex" value="{{ key }}"
+                   {{ 'checked' if pet.sex == key }}>
+            <span>{{ label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <label class="field {{ 'bad' if errors.birthdate }}">
+      <span>Nacimiento</span>
+      <input name="birthdate" type="date" value="{{ pet.birthdate or '' }}">
+      {% if errors.birthdate %}<em>{{ errors.birthdate }}</em>{% endif %}
+    </label>
+
+    <label class="field {{ 'bad' if errors.weight_kg }}">
+      <span>Peso (kg)</span>
+      <input name="weight_kg" inputmode="decimal" value="{{ pet.weight_kg or '' }}">
+      {% if errors.weight_kg %}<em>{{ errors.weight_kg }}</em>{% endif %}
+    </label>
+
+    <label class="check">
+      <input type="checkbox" name="inactive"
+             {{ 'checked' if pet.is_active is defined and not pet.is_active }}>
+      <span>Ya no asiste</span>
+    </label>
+  </details>
+
+  <button class="btn btn-big" type="submit">Guardar</button>
+  {% if not editing %}
+    <button class="btn btn-ghost" type="submit" name="and_another" value="1">
+      Guardar y agregar otra
+    </button>
+  {% endif %}
+</form>
+
+{% if editing %}
+  <form method="post" class="danger"
+        action="{{ url_for('pets.archive', pet_id=pet.id) }}"
+        data-confirm="¿Archivar a {{ pet.name }}?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-danger" type="submit">Archivar mascota</button>
+  </form>
+{% endif %}
+{% endblock %}
