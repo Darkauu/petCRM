@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set editing = client.id is defined and client.id %}
+{% block title %}{{ 'Editar cliente' if editing else 'Nuevo cliente' }}{% endblock %}
+{% block heading %}{{ 'Editar cliente' if editing else 'Nuevo cliente' }}{% endblock %}
+{% block back %}
+  <a class="back" href="{{ url_for('clients.detail', client_id=client.id) if editing else url_for('clients.index') }}">Volver</a>
+{% endblock %}
+
+{% block content %}
+<form method="post" class="form" novalidate
+      action="{{ url_for('clients.edit', client_id=client.id) if editing else url_for('clients.create') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label class="field {{ 'bad' if errors.name }}">
+    <span>Nombre</span>
+    <input name="name" value="{{ client.name or '' }}" required
+           autocomplete="name" autocapitalize="words" autofocus>
+    {% if errors.name %}<em>{{ errors.name }}</em>{% endif %}
+  </label>
+
+  <label class="field {{ 'bad' if errors.phone }}">
+    <span>Teléfono</span>
+    <input name="phone" type="tel" inputmode="tel" required
+           value="{{ client.phone_display or client.phone or '' }}"
+           placeholder="6123-4567">
+    {% if errors.phone %}<em>{{ errors.phone }}</em>{% endif %}
+  </label>
+
+  <details class="more" {{ 'open' if errors.email or errors.document }}>
+    <summary>Más datos</summary>
+
+    <label class="field {{ 'bad' if errors.document }}">
+      <span>Cédula o RUC</span>
+      <input name="document" value="{{ client.document or '' }}">
+      {% if errors.document %}<em>{{ errors.document }}</em>{% endif %}
+    </label>
+
+    <label class="field {{ 'bad' if errors.email }}">
+      <span>Correo</span>
+      <input name="email" type="email" inputmode="email" autocapitalize="off"
+             value="{{ client.email or '' }}">
+      {% if errors.email %}<em>{{ errors.email }}</em>{% endif %}
+    </label>
+
+    <label class="field">
+      <span>Dirección</span>
+      <input name="address" value="{{ client.address or '' }}">
+    </label>
+
+    <label class="field">
+      <span>Notas</span>
+      <textarea name="notes" rows="3">{{ client.notes or '' }}</textarea>
+    </label>
+  </details>
+
+  <button class="btn btn-big" type="submit">Guardar</button>
+</form>
+
+{% if editing %}
+  <form method="post" class="danger"
+        action="{{ url_for('clients.archive', client_id=client.id) }}"
+        data-confirm="¿Archivar a {{ client.name }}? Su historial se conserva.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-danger" type="submit">Archivar cliente</button>
+  </form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ client.name }}{% endblock %}
+{% block heading %}{{ client.name }}{% endblock %}
+{% block back %}<a class="back" href="{{ url_for('clients.index') }}">Volver</a>{% endblock %}
+{% block topaction %}
+  <a class="back" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar</a>
+{% endblock %}
+
+{% block content %}
+  <div class="contact">
+    <a class="btn btn-ghost" href="tel:{{ client.phone }}">
+      {{ client.phone_display or (client.phone | phone) }}
+    </a>
+    <a class="btn btn-ghost" href="https://wa.me/{{ client.phone[1:] }}"
+       target="_blank" rel="noopener">WhatsApp</a>
+  </div>
+
+  {% if client.notes %}<p class="note">{{ client.notes }}</p>{% endif %}
+
+  <h2 class="section">Mascotas</h2>
+
+  {% if pets %}
+    <ul class="list">
+      {% for pet in pets %}
+        <li class="pet {{ 'inactive' if not pet.is_active }}">
+          <a href="{{ url_for('pets.edit', pet_id=pet.id) }}">
+            <span class="list-title">
+              {{ pet.name }}
+              {% if not pet.is_active %}<span class="tag">ya no asiste</span>{% endif %}
+            </span>
+            <span class="list-sub">
+              {{ pet.size | size }}{% if pet.breed %} · {{ pet.breed }}{% endif %}
+            </span>
+            {% if pet.temperament %}
+              <span class="tag tag-warn">{{ pet.temperament }}</span>
+            {% endif %}
+
+            {% if pet.last_visit_date is none %}
+              <span class="visit visit-none">Sin visitas registradas</span>
+            {% elif pet.days_since_visit > config.FOLLOWUP_DAYS %}
+              <span class="visit visit-late">
+                Hace {{ pet.days_since_visit }} días ({{ pet.last_visit_date }})
+              </span>
+            {% else %}
+              <span class="visit">
+                Hace {{ pet.days_since_visit }} días ({{ pet.last_visit_date }})
+              </span>
+            {% endif %}
+          </a>
+
+          {% if pet.last_visit_date is not none
+                and pet.days_since_visit > config.FOLLOWUP_DAYS
+                and pet.is_active %}
+            <a class="btn btn-sm btn-wa"
+               href="https://wa.me/{{ client.phone[1:] }}"
+               target="_blank" rel="noopener">Escribirle</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty">
+      <p>Este cliente no tiene mascotas registradas.</p>
+    </div>
+  {% endif %}
+
+  <a class="btn btn-big"
+     href="{{ url_for('pets.create', client_id=client.id) }}">Agregar mascota</a>
+{% endblock %}

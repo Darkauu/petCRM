@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Servicios{% endblock %}
+{% block heading %}Servicios{% endblock %}
+
+{% block content %}
+  {% if rows %}
+    <ul class="list">
+      {% for row in rows %}
+        {% set p = prices.get(row.id, {}) %}
+        <li class="{{ 'inactive' if not row.is_active }}">
+          <a href="{{ url_for('services.edit', service_id=row.id) }}">
+            <span class="list-title">
+              {{ row.name }}
+              {% if not row.is_active %}<span class="tag">fuera del catálogo</span>{% endif %}
+            </span>
+            <span class="list-sub">
+              {% if p.get('any') is not none %}
+                {{ p['any'] | money }} · cualquier tamaño
+              {% elif p %}
+                {% for key, label in SIZES %}
+                  {%- if p.get(key) is not none -%}
+                    {{ label }} {{ p[key] | money }}{{ ' · ' if not loop.last }}
+                  {%- endif -%}
+                {% endfor %}
+              {% else %}
+                <span class="warn">sin precio</span>
+              {% endif %}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty">
+      <p>El catálogo está vacío.</p>
+      <a class="btn" href="{{ url_for('services.create') }}">Crear el primer servicio</a>
+    </div>
+  {% endif %}
+
+  <a class="fab" href="{{ url_for('services.create') }}" aria-label="Nuevo servicio">+</a>
+{% endblock %}

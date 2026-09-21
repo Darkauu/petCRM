@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Inicio{% endblock %}
+{% block heading %}Inicio{% endblock %}
+
+{% block content %}
+  <div class="tiles">
+    <a class="tile" href="{{ url_for('clients.index') }}">
+      <span class="tile-n">{{ client_count }}</span>
+      <span class="tile-l">{{ 'cliente' if client_count == 1 else 'clientes' }}</span>
+    </a>
+    <div class="tile tile-flat">
+      <span class="tile-n">{{ pet_count }}</span>
+      <span class="tile-l">{{ 'mascota activa' if pet_count == 1 else 'mascotas activas' }}</span>
+    </div>
+    <a class="tile" href="{{ url_for('services.index') }}">
+      <span class="tile-n">{{ service_count }}</span>
+      <span class="tile-l">{{ 'servicio' if service_count == 1 else 'servicios' }}</span>
+    </a>
+  </div>
+
+  <div class="stack">
+    <a class="btn btn-big" href="{{ url_for('clients.create') }}">Nuevo cliente</a>
+    <a class="btn btn-ghost" href="{{ url_for('clients.index') }}">Buscar un cliente</a>
+  </div>
+
+  {% if service_count == 0 %}
+    <p class="hint">
+      Todavía no hay servicios en el catálogo. Sin precios cargados no se
+      puede registrar una visita.
+      <a href="{{ url_for('services.create') }}">Crear el primero</a>.
+    </p>
+  {% endif %}
+{% endblock %}

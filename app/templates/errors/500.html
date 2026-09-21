@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Error{% endblock %}
+{% block heading %}Algo falló{% endblock %}
+{% block content %}
+  <div class="empty">
+    <p>Hubo un error de nuestro lado. Lo que ya habías guardado está a salvo.</p>
+    <a class="btn" href="{{ url_for('main.home') }}">Volver al inicio</a>
+  </div>
+{% endblock %}

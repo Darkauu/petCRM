@@ -23,9 +23,16 @@ class Config:
 
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024   # limite de subida (import Excel)
 
+    # Dias sin venir a partir de los cuales una mascota se marca como
+    # atrasada. Es un valor provisional del negocio, no una regla fija.
+    FOLLOWUP_DAYS = 15
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
+    # Sin esto, ni la sesion ni el CSRF arrancan en una maquina limpia
+    # que todavia no tiene .env. Produccion sigue exigiendo la real.
+    SECRET_KEY = Config.SECRET_KEY or "dev-inseguro-no-usar-en-produccion"
 
 
 class ProductionConfig(Config):

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% set editing = service.id is defined and service.id %}
+{% set by_size = prices and 'any' not in prices %}
+{% block title %}{{ 'Editar servicio' if editing else 'Nuevo servicio' }}{% endblock %}
+{% block heading %}{{ 'Editar servicio' if editing else 'Nuevo servicio' }}{% endblock %}
+{% block back %}<a class="back" href="{{ url_for('services.index') }}">Volver</a>{% endblock %}
+
+{% block content %}
+<form method="post" class="form" novalidate
+      action="{{ url_for('services.edit', service_id=service.id) if editing else url_for('services.create') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label class="field {{ 'bad' if errors.name }}">
+    <span>Nombre</span>
+    <input name="name" value="{{ service.name or '' }}" required
+           autocapitalize="sentences" autofocus>
+    {% if errors.name %}<em>{{ errors.name }}</em>{% endif %}
+  </label>
+
+  <fieldset class="field pills">
+    <legend>Precio</legend>
+    <div class="pill-row">
+      <label class="pill">
+        <input type="radio" name="price_mode" value="any" data-price-mode
+               {{ 'checked' if not by_size }}>
+        <span>Uno solo</span>
+      </label>
+      <label class="pill">
+        <input type="radio" name="price_mode" value="size" data-price-mode
+               {{ 'checked' if by_size }}>
+        <span>Por tamaño</span>
+      </label>
+    </div>
+  </fieldset>
+
+  <div data-price-block="any" {{ 'hidden' if by_size }}>
+    <label class="field {{ 'bad' if errors.price_any }}">
+      <span>Precio</span>
+      <input name="price_any" inputmode="decimal" placeholder="0.00"
+             value="{{ prices['any'] | money(false) if prices.get('any') is not none }}">
+      {% if errors.price_any %}<em>{{ errors.price_any }}</em>{% endif %}
+    </label>
+  </div>
+
+  <div data-price-block="size" {{ 'hidden' if not by_size }}>
+    {% for key, label in SIZES %}
+      <label class="field {{ 'bad' if errors['price_' ~ key] }}">
+        <span>{{ label }}</span>
+        <input name="price_{{ key }}" inputmode="decimal" placeholder="0.00"
+               value="{{ prices[key] | money(false) if prices.get(key) is not none }}">
+        {% if errors['price_' ~ key] %}<em>{{ errors['price_' ~ key] }}</em>{% endif %}
+      </label>
+    {% endfor %}
+    <p class="hint">Deja en blanco los tamaños que no atiendes.</p>
+  </div>
+
+  <details class="more">
+    <summary>Más datos</summary>
+    <label class="field">
+      <span>Descripción</span>
+      <textarea name="description" rows="2">{{ service.description or '' }}</textarea>
+    </label>
+  </details>
+
+  <button class="btn btn-big" type="submit">Guardar</button>
+</form>
+
+{% if editing %}
+  <form method="post" class="danger"
+        action="{{ url_for('services.toggle', service_id=service.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost {{ '' if not service.is_active else 'btn-danger' }}" type="submit">
+      {{ 'Reactivar servicio' if not service.is_active else 'Sacar del catálogo' }}
+    </button>
+  </form>
+  <p class="hint">
+    Un servicio nunca se borra. Al sacarlo del catálogo deja de aparecer al
+    registrar visitas, pero las visitas viejas lo siguen mostrando.
+  </p>
+{% endif %}
+{% endblock %}
