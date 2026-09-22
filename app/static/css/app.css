@@ -15,12 +15,17 @@
   --ok:        #0f766e;
   --ok-bg:     #e7f4f2;
   --accent-soft: #e2f0ee;
+  --on-accent-soft: rgba(255, 255, 255, .2);
+  --on-accent-line: rgba(255, 255, 255, .38);
   --radius:    12px;
   --tap:       48px;
 }
 
+/* Modo noche. Se aplica en dos casos: cuando lo pide el sistema y no
+   se eligio claro a mano, y cuando se eligio oscuro a mano. Los mismos
+   tokens en los dos: CSS no tiene forma de reutilizar un bloque. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg:      #14171a;
     --surface: #1d2126;
     --border:  #2f353c;
@@ -34,7 +39,27 @@
     --ok:      #2dd4bf;
     --ok-bg:   #12312e;
     --accent-soft: #10312e;
+    --on-accent-soft: rgba(0, 0, 0, .14);
+    --on-accent-line: rgba(0, 0, 0, .28);
   }
+}
+
+:root[data-theme="dark"] {
+    --bg:      #14171a;
+    --surface: #1d2126;
+    --border:  #2f353c;
+    --text:    #e9edf1;
+    --muted:   #9aa5b1;
+    --accent:  #2dd4bf;
+    --accent-ink:#0b2a27;
+    --danger:  #f87171;
+    --warn:    #fbbf24;
+    --warn-bg: #2e2513;
+    --ok:      #2dd4bf;
+    --ok-bg:   #12312e;
+    --accent-soft: #10312e;
+    --on-accent-soft: rgba(0, 0, 0, .14);
+    --on-accent-line: rgba(0, 0, 0, .28);
 }
 
 * { box-sizing: border-box; }
@@ -61,10 +86,39 @@ body {
   min-height: var(--tap); padding: .5rem 1rem;
 }
 .topbar h1 { flex: 1; margin: 0; font-size: 1.125rem; font-weight: 600; }
+/* Antes era texto plano del mismo color que el resto de la cabecera y
+   habia que buscarlo. Ahora es un boton con su propio fondo. */
 .back {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 .875rem;
   color: var(--accent-ink); text-decoration: none;
-  font-size: .9375rem; padding: .5rem 0; white-space: nowrap;
+  background: var(--on-accent-soft);
+  border: 1px solid var(--on-accent-line);
+  border-radius: var(--radius);
+  font-size: .9375rem; font-weight: 600; white-space: nowrap;
 }
+.back-icon { width: 44px; padding: 0; }
+
+/* Dia y noche. Se muestra el icono de a donde se va, no el de donde se
+   esta: en claro la luna, en oscuro el sol. */
+.tema {
+  display: none; align-items: center; justify-content: center;
+  width: 44px; height: 44px; flex-shrink: 0; padding: 0;
+  color: var(--accent-ink); cursor: pointer;
+  background: var(--on-accent-soft);
+  border: 1px solid var(--on-accent-line);
+  border-radius: var(--radius);
+}
+.js .tema { display: inline-flex; }      /* sin JS no haria nada */
+.tema .ico-sol { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tema .ico-luna { display: none; }
+  :root:not([data-theme="light"]) .tema .ico-sol { display: inline-flex; }
+}
+:root[data-theme="dark"] .tema .ico-luna { display: none; }
+:root[data-theme="dark"] .tema .ico-sol { display: inline-flex; }
+:root[data-theme="light"] .tema .ico-luna { display: inline-flex; }
+:root[data-theme="light"] .tema .ico-sol { display: none; }
 
 .wrap { max-width: 640px; margin: 0 auto; padding: 1rem; }
 
@@ -414,6 +468,7 @@ body {
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .btn-solid-danger { color: #1a0d0d; }
 }
+:root[data-theme="dark"] .btn-solid-danger { color: #1a0d0d; }
 
 /* ---- Buscador con resultados en vivo --------------------------------- */
 
@@ -527,7 +582,7 @@ code {
   .tabbar a.on { background: var(--accent-soft); }
 
   .topbar { grid-column: 2; grid-row: 1; }
-  .topbar-inner { max-width: 68rem; margin: 0 auto; padding: .75rem 2rem; }
+  .topbar-inner { max-width: 56rem; margin: 0 auto; padding: .75rem 2rem; }
   .topbar h1 { font-size: 1.25rem; }
 
   .wrap {
@@ -535,7 +590,7 @@ code {
     /* width: 100% es necesario: en una rejilla, el 'margin: 0 auto' que
        trae .wrap de base impide que el elemento se estire, y se encoge
        al ancho de su contenido dejando un hueco al lado de la barra. */
-    width: 100%; max-width: 68rem; margin-inline: auto;
+    width: 100%; max-width: 56rem; margin-inline: auto;
     padding: 1.5rem 2rem 3rem;
   }
 
@@ -544,10 +599,13 @@ code {
   .fab { display: none; }
   .topaction { display: inline-flex; }
 
-  /* Un formulario de 1100px de ancho no se lee: los campos quedan tan
-     largos que se pierde de vista que se estaba escribiendo. */
-  .form, .search, .typeahead, .contact, .daynav, .danger, .stack { max-width: 34rem; }
-  .note, .hint, .gap, .cmd, .empty p { max-width: 65ch; }
+  /* La columna entera va centrada en la pantalla (.wrap, arriba) y
+     dentro todo arranca en su mismo borde: encabezados, tarjetas,
+     listas y textos. Centrar cada bloque por separado desalinearia el
+     texto de su propio encabezado.
+     Los formularios si se centran, porque en esa pantalla el
+     formulario ES el contenido y no hay nada con que desalinearse. */
+  .form, .contact, .danger, .stack { max-width: 34rem; margin-inline: auto; }
 
   /* Las listas aprovechan el ancho en vez de dejar medio metro vacio. */
   .list {
@@ -558,13 +616,11 @@ code {
   .typeahead-list { display: block; }
   .typeahead-list li { margin-bottom: .125rem; }
 
-  .tiles { max-width: 46rem; }
-  .bars, .headline { max-width: 44rem; }
-  .totalbar { bottom: 0; max-width: 34rem; }
+  .totalbar { bottom: 0; max-width: 34rem; margin-inline: auto; }
 
   /* Con raton no hace falta un boton del ancho de un pulgar: las
      flechas se ajustan a su icono y el dia queda al centro. */
-  .daynav { max-width: 24rem; }
+  .daynav { max-width: 24rem; margin-inline: auto; }
   .daynav .btn { flex: 0 0 auto; padding: 0 .875rem; }
   .daynav-label, .daynav .btn-ghost:not([aria-label]) { flex: 1; }
   .modal { max-width: 26rem; }

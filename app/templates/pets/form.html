@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% set editing = pet.id is defined and pet.id %}
 {% block title %}{{ 'Editar mascota' if editing else 'Nueva mascota' }}{% endblock %}
 {% block heading %}{{ 'Editar mascota' if editing else 'Nueva mascota' }}{% endblock %}
 {% block back %}
-  <a class="back" href="{{ url_for('clients.detail', client_id=client.id) }}">Volver</a>
+  <a class="back back-icon" href="{{ url_for('clients.detail', client_id=client.id) }}" aria-label="Volver">{{ icon('atras', 20) }}</a>
 {% endblock %}
 
 {% block content %}

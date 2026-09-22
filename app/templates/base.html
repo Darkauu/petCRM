@@ -7,6 +7,15 @@
   <meta name="theme-color" content="#0f766e">
   <title>{% block title %}{{ biz_name or 'PetCRM' }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script nonce="{{ csp_nonce }}">
+    (function () {
+      document.documentElement.classList.add("js");
+      try {
+        var guardado = localStorage.getItem("tema");
+        if (guardado) document.documentElement.dataset.theme = guardado;
+      } catch (e) { /* navegacion privada: se queda con la del sistema */ }
+    })();
+  </script>
 </head>
 <body>
 
@@ -15,6 +24,11 @@
     {% block back %}{% endblock %}
     <h1>{% block heading %}{{ biz_name or 'PetCRM' }}{% endblock %}</h1>
     {% block topaction %}{% endblock %}
+    <button type="button" class="tema" data-tema
+            aria-label="Cambiar entre modo día y noche"
+            title="Cambiar entre modo día y noche">
+      <span class="ico-luna">{{ icon('luna', 20) }}</span><span class="ico-sol">{{ icon('sol', 20) }}</span>
+    </button>
   </div>
 </header>
 

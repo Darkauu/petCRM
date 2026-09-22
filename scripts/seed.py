@@ -5,14 +5,19 @@ forma que se puedan ver de una vez los estados que importan: quien se
 atraso y sale en la lista de WhatsApp, quien vino hace poco y no sale,
 una mascota sin visitas, y una visita pendiente de cobro.
 
+Tambien deja lista la cuenta para entrar, porque sembrar datos que
+despues no se pueden ver no sirve de nada.
+
 Uso:
     python scripts/seed.py
     python scripts/seed.py --telefono 6123-4567   # para probar wa.me
                                                   # contra tu propio numero
+    python scripts/seed.py --sin-cuenta           # no crear usuario
     python scripts/seed.py --force                # sobre una base con datos
 
-Se niega a correr si la base ya tiene clientes, salvo --force: esto es
-para desarrollo, y no tiene nada que hacer sobre datos de verdad.
+Se niega a correr si la base ya tiene clientes, salvo --force, y nunca
+toca una cuenta que ya exista: esto es para desarrollo y no tiene nada
+que hacer sobre datos de verdad.
 """
 import argparse
 import sys
@@ -23,18 +28,44 @@ sys.path.insert(0, str(BASE_DIR))
 
 from app import create_app                                   # noqa: E402
 from app.clock import shift, today                           # noqa: E402
-from app.repos import clients, pets, services, visits        # noqa: E402
+from app.repos import clients, pets, services, settings, users, visits  # noqa: E402
 
 NOTE = "Cliente de prueba (scripts/seed.py)"
+CORREO = "prueba@petcrm.local"
+CLAVE = "prueba-de-desarrollo"
+
+
+def limpiar():
+    """Borra SOLO lo que sembro este script, reconocible por su nota.
+
+    Sin esto, sembrar dos veces revienta contra los indices unicos de
+    telefono y de nombre de servicio, con un error de SQLite crudo. Lo
+    que no lleve la marca no se toca: si hay clientes de verdad en la
+    base, siguen ahi.
+    """
+    from app.database import execute
+    dentro = "SELECT id FROM client WHERE notes = ?"
+    execute(f"DELETE FROM visit_service WHERE visit_id IN "
+            f"(SELECT id FROM visit WHERE client_id IN ({dentro}))", (NOTE,))
+    execute(f"DELETE FROM visit WHERE client_id IN ({dentro})", (NOTE,))
+    execute(f"DELETE FROM pet WHERE client_id IN ({dentro})", (NOTE,))
+    cur = execute("DELETE FROM client WHERE notes = ?", (NOTE,))
+    return cur.rowcount
+
+
+def servicio(name, description, prices):
+    """Reutiliza el del catalogo si ya esta: el nombre es unico."""
+    row = services.find_by_name(name)
+    return row["id"] if row else services.create(name, description, prices)
 
 
 def build(phone_for_whatsapp):
     """Cada cliente existe para mostrar un estado distinto."""
-    bano = services.create("Baño completo", "Baño, secado y cepillado",
-                           {"small": 1500, "medium": 2000, "large": 2800})
-    corte = services.create("Corte de pelo", None,
-                            {"small": 2500, "medium": 3200, "large": 4000})
-    unias = services.create("Corte de uñas", None, {"any": 500})
+    bano = servicio("Baño completo", "Baño, secado y cepillado",
+                    {"small": 1500, "medium": 2000, "large": 2800})
+    corte = servicio("Corte de pelo", None,
+                     {"small": 2500, "medium": 3200, "large": 4000})
+    unias = servicio("Corte de uñas", None, {"any": 500})
 
     hoy = today()
     hecho = []
@@ -100,10 +131,26 @@ def _pet(client_id, name, size, breed=None, temperament=None):
             "medical_notes": None, "is_active": 1}
 
 
+def cuenta(correo, clave):
+    """Crea la cuenta del duenio si no hay ninguna. Nunca toca una que ya
+    exista: si alguien corre esto contra una base con su cuenta real, no
+    se la pisa ni se le cambia la clave."""
+    from werkzeug.security import generate_password_hash
+
+    if users.count_active():
+        return None
+    users.create(correo, generate_password_hash(clave), "Duenio de prueba")
+    return correo
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--telefono", default="6123-4567",
                         help="numero del cliente atrasado, para probar wa.me")
+    parser.add_argument("--correo", default=CORREO)
+    parser.add_argument("--clave", default=CLAVE)
+    parser.add_argument("--sin-cuenta", action="store_true",
+                        dest="sin_cuenta", help="no crear usuario")
     parser.add_argument("--force", action="store_true",
                         help="sembrar aunque la base ya tenga clientes")
     args = parser.parse_args()
@@ -122,12 +169,30 @@ if __name__ == "__main__":
                 f"La base ya tiene {existing} cliente(s). "
                 "Si de verdad quieres sembrar encima, usa --force."
             )
+        if args.force:
+            borrados = limpiar()
+            if borrados:
+                print(f"  (se reemplazaron {borrados} clientes de prueba "
+                      f"sembrados antes)")
 
         for name, why in build(phone):
             print(f"  {name:<12} {why}")
+
+        settings.save({"business_name": "Peluquería Canina de Prueba"})
+
+        creada = None if args.sin_cuenta else cuenta(args.correo, args.clave)
         from app.database import get_db
         get_db().commit()
 
-    print("\nListo. Para ver el flujo de WhatsApp:")
-    print("  Resumen -> «clientes llevan más de N días sin venir» -> Escribirle")
-    print(f"  El botón de Ana Vega abre WhatsApp con {args.telefono}.")
+    if creada:
+        print(f"\nCuenta de DESARROLLO creada:")
+        print(f"  correo: {creada}")
+        print(f"  clave : {args.clave}")
+    elif not args.sin_cuenta:
+        print("\nYa había una cuenta; no se tocó.")
+
+    print("\nPara ver el flujo de WhatsApp:")
+    print("  1. Levanta la aplicación y entra.")
+    print("  2. Resumen -> «N clientes llevan más de X días sin venir».")
+    print("  3. Toca «Escribirle» en Ana Vega: WhatsApp abre con")
+    print(f"     {args.telefono}. También está en su ficha, por mascota.")

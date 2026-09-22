@@ -1,9 +1,10 @@
 """Application factory."""
 import logging
+import secrets
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from flask import Flask, render_template, request
+from flask import Flask, g, render_template, request
 from flask_wtf.csrf import CSRFError, CSRFProtect
 
 from app import auth, backups, database, labels, money, phone, schema
@@ -96,18 +97,29 @@ def _register_security_headers(app):
     algo de otro lado. 'unsafe-inline' en estilos es necesario porque
     las barras del resumen llevan su ancho en un atributo style.
     """
-    csp = (
-        "default-src 'self'; "
-        "img-src 'self' data:; "
-        "style-src 'self' 'unsafe-inline'; "
-        "script-src 'self'; "
-        "form-action 'self'; "
-        "frame-ancestors 'none'; "
-        "base-uri 'self'"
-    )
+    @app.before_request
+    def make_nonce():
+        # Un nonce nuevo por peticion. Es lo que deja pasar el unico
+        # script en linea que hay (el que fija el tema antes de pintar)
+        # sin tener que permitir scripts en linea en general, que seria
+        # regalar la defensa entera.
+        g.csp_nonce = secrets.token_urlsafe(16)
+
+    @app.context_processor
+    def expose_nonce():
+        return {"csp_nonce": g.get("csp_nonce", "")}
 
     @app.after_request
     def headers(response):
+        csp = (
+            "default-src 'self'; "
+            "img-src 'self' data:; "
+            "style-src 'self' 'unsafe-inline'; "
+            f"script-src 'self' 'nonce-{g.get('csp_nonce', '')}'; "
+            "form-action 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'"
+        )
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "same-origin")

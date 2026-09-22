@@ -327,6 +327,38 @@ def run_interface(db_path):
     check("y ahi tambien queda el formulario de siempre",
           'action="/clientes/"' in body and "Buscar</button>" in body)
 
+    print("\nCabecera")
+    body = client.get("/clientes/1").get_data(as_text=True)
+    check("volver es una flecha, no la palabra escrita",
+          ">Volver<" not in body and "<svg" in body.split("<main")[0])
+    check("y conserva su nombre para quien no ve el icono",
+          'aria-label="Volver"' in body)
+    check("con su propio fondo, para que no se pierda en la cabecera",
+          'class="back back-icon"' in body)
+    check("el boton de dia y noche esta en toda pantalla",
+          "data-tema" in body and "data-tema" in
+          client.get("/resumen/").get_data(as_text=True))
+
+    r = client.get("/resumen/")
+    body = r.get_data(as_text=True)
+    check("el resumen dice 'Demanda de servicio'", "Demanda de servicio" in body)
+    check("y ya no dice 'Qu\u00e9 pesa m\u00e1s'", "pesa m" not in body)
+
+    print("\nEl script del tema no abre la puerta a otros")
+    import re as _re
+    csp = r.headers["Content-Security-Policy"]
+    nonce_csp = _re.search(r"nonce-([\w-]+)", csp)
+    nonce_html = _re.search(r'<script nonce="([\w-]+)"', body)
+    check("el script en linea va firmado con un nonce",
+          bool(nonce_csp) and bool(nonce_html)
+          and nonce_csp.group(1) == nonce_html.group(1))
+    otro = _re.search(r"nonce-([\w-]+)",
+                      client.get("/resumen/").headers["Content-Security-Policy"])
+    check("y el nonce cambia en cada peticion, o no serviria de nada",
+          otro.group(1) != nonce_csp.group(1))
+    check("no se permitieron scripts en linea en general",
+          "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0])
+
     print("\nConfirmacion propia, no la del navegador")
     check("el dialogo viene en el layout", 'id="confirm-dialog"' in body)
     check("y por lo tanto en cualquier pantalla",
@@ -726,6 +758,87 @@ def run_auto_migrate(_unused):
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def run_seed(_unused):
+    """scripts/seed.py: datos para ver el sistema andando, sin hacer danio."""
+    import subprocess
+
+    work = tempfile.mkdtemp()
+    db = os.path.join(work, "petcrm.db")
+    entorno = dict(os.environ, DB_PATH=db, AUTO_BACKUP="0")
+
+    def sembrar(*extra):
+        return subprocess.run(
+            [sys.executable, str(BASE_DIR / "scripts" / "seed.py"), *extra],
+            cwd=str(BASE_DIR), env=entorno, capture_output=True, text=True)
+
+    subprocess.run([sys.executable, str(BASE_DIR / "scripts" / "init_db.py")],
+                   cwd=str(BASE_DIR), env=entorno, capture_output=True)
+
+    print("\nSembrar datos de prueba")
+    r = sembrar("--telefono", "6123-4567")
+    check("corre sin errores", r.returncode == 0, r.stderr[-400:])
+    check("deja lista la cuenta para entrar",
+          "prueba@petcrm.local" in r.stdout and "clave" in r.stdout)
+    check("y dice como llegar al boton de WhatsApp",
+          "Escribirle" in r.stdout and "6123-4567" in r.stdout)
+
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    app = create_app(Cfg)
+    client = app.test_client()
+    r = client.post("/entrar", data={"email": "prueba@petcrm.local",
+                                     "password": "prueba-de-desarrollo"})
+    check("se puede entrar con esa cuenta, sin registrarse a mano",
+          r.status_code == 302 and client.get("/").status_code == 200)
+
+    body = client.get("/resumen/atrasados").get_data(as_text=True)
+    check("hay tres atrasados", body.count("btn-wa") == 3, body.count("btn-wa"))
+    check("Ana Vega va de primera, la mas atrasada",
+          body.index("Ana Vega") < body.index("Beto Lima"))
+    check("Cira Paz NO sale: vino hace 4 dias", "Cira Paz" not in body)
+    check("el enlace de WhatsApp lleva el numero internacional",
+          "wa.me/50761234567" in body)
+
+    body = client.get("/").get_data(as_text=True)
+    check("y hay una visita pendiente de cobro, para ver ese flujo",
+          "pendiente de cobro" in body)
+
+    print("\nY no hace danio donde no debe")
+    r = sembrar()
+    check("se niega a sembrar sobre una base con clientes",
+          r.returncode != 0 and "usa --force" in r.stdout + r.stderr)
+
+    with app.app_context():
+        from werkzeug.security import generate_password_hash
+        from app.database import get_db
+        from app.repos import users
+        users.create("real@ejemplo.com", generate_password_hash("clave-real"),
+                     "Duenio real")
+        get_db().commit()
+
+    r = sembrar("--force")
+    check("con --force vuelve a sembrar sin reventar", r.returncode == 0,
+          r.stderr[-400:])
+    check("reemplaza lo suyo en vez de duplicarlo",
+          "se reemplazaron 5" in r.stdout)
+
+    with create_app(Cfg).app_context():
+        from werkzeug.security import check_password_hash
+        from app.repos import clients as repo_clients, users as repo_users
+        check("no quedaron clientes duplicados",
+              repo_clients.count_active() == 5, repo_clients.count_active())
+        real = repo_users.get_by_email("real@ejemplo.com")
+        check("y NO toca una cuenta que ya existia",
+              real is not None
+              and check_password_hash(real["password_hash"], "clave-real"))
+
+    shutil.rmtree(work, ignore_errors=True)
+
+
 def run_schema_guard(_unused):
     """Codigo y base desalineados: tiene que verse, no reventar.
 
@@ -877,7 +990,7 @@ def run_stats(db_path):
           ">3<" in body and ">2<" in body)
     # Se mira solo la seccion de servicios: arriba hay mensajes flash
     # acumulados que tambien nombran los servicios.
-    barras = body[body.index("Qu\u00e9 pesa m\u00e1s"):]
+    barras = body[body.index("Demanda de servicio"):]
     check("ordena por plata y no por cantidad: corte 1 vez ($70) "
           "gana a bano 3 veces ($60)",
           barras.index("Corte") < barras.index("Bano"))
@@ -1024,7 +1137,7 @@ def shift_of(app, iso, days):
 if __name__ == "__main__":
     for runner in (run_flow, run_csrf, run_stats, run_interface,
                    run_schema_guard, run_auto_migrate, run_auth,
-                   run_backups):
+                   run_backups, run_seed):
         path = fresh_db()
         try:
             runner(path)

@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% set editing = service.id is defined and service.id %}
 {% set by_size = prices and 'any' not in prices %}
 {% block title %}{{ 'Editar servicio' if editing else 'Nuevo servicio' }}{% endblock %}
 {% block heading %}{{ 'Editar servicio' if editing else 'Nuevo servicio' }}{% endblock %}
-{% block back %}<a class="back" href="{{ url_for('services.index') }}">Volver</a>{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('services.index') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
 
 {% block content %}
 <form method="post" class="form" novalidate

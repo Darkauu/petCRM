@@ -2,7 +2,7 @@
 {% from "_icons.html" import icon %}
 {% block title %}A quién escribirle{% endblock %}
 {% block heading %}A quién escribirle{% endblock %}
-{% block back %}<a class="back" href="{{ url_for('stats.summary') }}">Volver</a>{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('stats.summary') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
 
 {% block content %}
   {% if rows %}
