@@ -259,6 +259,62 @@ def run_flow(db_path):
     check("el inicio ofrece registrar visita como accion principal",
           "Registrar visita" in body)
 
+def run_interface(db_path):
+    """Lo que el servidor si puede comprobar de la interfaz.
+
+    El comportamiento en el navegador (que el dialogo sea el de la app y
+    que el buscador responda al escribir) lo cubre scripts/ui_check.py,
+    que necesita un navegador y por eso no entra al CI.
+    """
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db_path
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+
+    client = create_app(Cfg).test_client()
+    client.post("/clientes/nuevo", data={"name": "Marta Rios", "phone": "61234567"})
+    client.post("/clientes/1/mascotas/nueva", data={"name": "Toby", "size": "small"})
+    client.post("/clientes/nuevo", data={"name": "Beto Lima", "phone": "60099887"})
+
+    print("\nBuscador que responde al escribir")
+    data = client.get("/visitas/buscar?q=tob").get_json()
+    check("encuentra al duenio por el nombre de su perro",
+          len(data["rows"]) == 1 and data["rows"][0]["name"] == "Marta Rios", data)
+    check("trae las mascotas para distinguir homonimos",
+          "Toby" in data["rows"][0]["sub"])
+    check("y la URL ya armada por el servidor",
+          data["rows"][0]["url"] == "/visitas/nueva/1")
+    check("busca por telefono",
+          client.get("/visitas/buscar?q=6009").get_json()["rows"][0]["name"]
+          == "Beto Lima")
+    check("una busqueda vacia no devuelve el listin completo",
+          client.get("/visitas/buscar?q=").get_json()["rows"] == [])
+    check("sin coincidencias devuelve lista vacia y no un error",
+          client.get("/visitas/buscar?q=zzzz").get_json()["rows"] == [])
+
+    body = client.get("/visitas/nueva").get_data(as_text=True)
+    check("la pantalla apunta al buscador", 'data-search-url="/visitas/buscar"' in body)
+    check("el formulario sigue existiendo para cuando no hay JS",
+          'action="/visitas/nueva"' in body and "Buscar</button>" in body)
+
+    print("\nConfirmacion propia, no la del navegador")
+    check("el dialogo viene en el layout", 'id="confirm-dialog"' in body)
+    check("y por lo tanto en cualquier pantalla",
+          'id="confirm-dialog"' in client.get("/").get_data(as_text=True))
+
+    body = client.get("/clientes/1/editar").get_data(as_text=True)
+    check("cada accion destructiva trae su mensaje", "data-confirm=" in body)
+    check("y el nombre de lo que va a pasar", 'data-confirm-ok="Archivar"' in body)
+
+    js = (BASE_DIR / "app" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    check("el confirm del navegador queda solo como ultimo recurso",
+          js.count("window.confirm(") == 1 and "showModal" in js,
+          f'{js.count("window.confirm(")} llamadas')
+    check("los resultados se pintan con textContent y no con innerHTML",
+          "innerHTML = \"\"" in js and "innerHTML =" not in js.replace(
+              'innerHTML = ""', ""))
+
+
 def run_csrf(db_path):
     print("\nProteccion CSRF")
 
@@ -468,7 +524,7 @@ def shift_of(app, iso, days):
 
 
 if __name__ == "__main__":
-    for runner in (run_flow, run_csrf, run_stats):
+    for runner in (run_flow, run_csrf, run_stats, run_interface):
         path = fresh_db()
         try:
             runner(path)

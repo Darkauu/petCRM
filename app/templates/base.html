@@ -42,6 +42,20 @@
      class="{{ 'on' if request.blueprint == 'services' }}">Servicios</a>
 </nav>
 
+{# Confirmacion propia de la aplicacion, no la del navegador: se ve
+   igual en cualquier navegador y se muda tal cual a una app nativa. #}
+<dialog id="confirm-dialog" class="modal" aria-labelledby="confirm-text">
+  <form method="dialog" class="modal-box">
+    <p id="confirm-text" data-confirm-text></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" value="cancel">Cancelar</button>
+      <button class="btn btn-solid-danger" value="ok" data-confirm-accept>
+        Confirmar
+      </button>
+    </div>
+  </form>
+</dialog>
+
 <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </body>
 </html>

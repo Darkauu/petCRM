@@ -101,7 +101,8 @@
       <button class="btn btn-big" type="submit">Cobrar</button>
     </form>
     <form method="post" action="{{ url_for('visits.cancel', visit_id=visit.id) }}"
-          data-confirm="¿Cerrar sin cobro? Queda el registro de que vinieron.">
+          data-confirm="¿Cerrar sin cobro? Queda el registro de que vinieron."
+          data-confirm-ok="Cerrar sin cobro">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-ghost" type="submit">Se retiró sin atender</button>
     </form>
@@ -118,7 +119,8 @@
 {% if editing %}
   <form method="post" class="danger"
         action="{{ url_for('visits.archive', visit_id=visit.id) }}"
-        data-confirm="¿Eliminar esta visita? Deja de contar en los totales.">
+        data-confirm="¿Eliminar esta visita? Deja de contar en los totales."
+        data-confirm-ok="Eliminar">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-ghost btn-danger" type="submit">Eliminar visita</button>
   </form>
