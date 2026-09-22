@@ -61,6 +61,24 @@ def _register_schema_guard(app):
     """
     expected = schema.expected_version(app.config["MIGRATIONS_DIR"])
     app.config["SCHEMA_VERSION"] = expected
+    app.config["SCHEMA_ERROR"] = None
+
+    if app.config.get("AUTO_MIGRATE", True):
+        try:
+            result = schema.ensure_migrated(
+                app.config["DB_PATH"], app.config["MIGRATIONS_DIR"]
+            )
+            if result["action"] == "migrated":
+                app.logger.warning(
+                    "Base migrada de v%s a v%s (%s). Respaldo en %s",
+                    result["from"], result["version"],
+                    ", ".join(result["applied"]), result["backup"],
+                )
+        except schema.MigrationError as exc:
+            # No se tumba la aplicacion: se deja que la guardia explique
+            # lo que paso, que es mas util que no poder ni arrancar.
+            app.config["SCHEMA_ERROR"] = str(exc)
+            app.logger.error("No se pudo migrar la base: %s", exc)
 
     @app.before_request
     def guard():
@@ -80,6 +98,7 @@ def _register_schema_guard(app):
             expected=expected,
             missing=expected - found,
             empty=schema.is_empty(db),
+            error=app.config["SCHEMA_ERROR"],
         ), 503
 
 

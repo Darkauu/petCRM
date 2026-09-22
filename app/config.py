@@ -13,6 +13,10 @@ class Config:
     DB_PATH = str(BASE_DIR / os.environ.get("DB_PATH", "data/petcrm.db"))
     MIGRATIONS_DIR = str(BASE_DIR / "migrations")
 
+    # La aplicacion pone la base al dia al arrancar, respaldandola
+    # antes. Se apaga con AUTO_MIGRATE=0 para migrar a mano.
+    AUTO_MIGRATE = os.environ.get("AUTO_MIGRATE", "1") != "0"
+
     TIMEZONE = "America/Panama"
 
     # Sesion

@@ -9,7 +9,9 @@ Uso:
 """
 import contextlib
 import io
+import logging
 import os
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -331,6 +333,108 @@ def run_interface(db_path):
               'innerHTML = ""', ""))
 
 
+def run_auto_migrate(_unused):
+    """La base se pone al dia sola al arrancar, y respaldada."""
+    work = tempfile.mkdtemp()
+    db = os.path.join(work, "petcrm.db")
+
+    conn = sqlite3.connect(db)
+    conn.execute("PRAGMA journal_mode = WAL")
+    for name in ("001_initial.sql", "002_resumen.sql"):
+        conn.executescript(
+            (BASE_DIR / "migrations" / name).read_text(encoding="utf-8"))
+    conn.execute("INSERT INTO client (name, phone) VALUES ('Marta','+50761234567')")
+    conn.execute("INSERT INTO pet (client_id, name, size) VALUES (1,'Toby','small')")
+    conn.execute("INSERT INTO service (name) VALUES ('Bano')")
+    conn.execute("INSERT INTO service_price (service_id, size, price_cents) "
+                 "VALUES (1,'any',2000)")
+    conn.execute("INSERT INTO visit (client_id, visit_date) VALUES (1,'2026-08-01')")
+    conn.execute("INSERT INTO visit_service (visit_id, pet_id, service_id, price_cents) "
+                 "VALUES (1,1,1,2000)")
+    conn.commit()
+    conn.close()
+
+    print("\nLa base se migra sola al arrancar")
+
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+
+    logging.disable(logging.CRITICAL)
+    app = create_app(Cfg)
+    logging.disable(logging.NOTSET)
+    client = app.test_client()
+
+    conn = sqlite3.connect(db)
+    check("la version sube sola", conn.execute("PRAGMA user_version").fetchone()[0] == 3)
+    check("el cliente sigue ahi",
+          conn.execute("SELECT name FROM client").fetchone()[0] == "Marta")
+    check("la visita historica se conserva con su estado",
+          conn.execute("SELECT status FROM visit").fetchone()[0] == "completed")
+    check("y su linea de cobro",
+          conn.execute("SELECT price_cents FROM visit_service").fetchone()[0] == 2000)
+    conn.close()
+
+    respaldos = os.listdir(os.path.join(work, "respaldos"))
+    check("se respaldo antes de tocar nada", len(respaldos) == 1, respaldos)
+    check("el respaldo dice de que version venia", "-v2-" in respaldos[0])
+
+    r = client.post("/visitas/nueva/1", data={"pick": ["1:1"], "price_1_1": "20"})
+    check("registrar una visita ya funciona, sin correr ningun comando",
+          r.status_code == 302, r.get_data(as_text=True)[:200])
+    check("health responde ok", client.get("/health").get_json()["status"] == "ok")
+
+    print("\nUna migracion que falla no deja la base a medias")
+    migs = tempfile.mkdtemp()
+    for name in ("001_initial.sql", "002_resumen.sql", "003_cobro.sql"):
+        shutil.copy(BASE_DIR / "migrations" / name, migs)
+    # Crea algo y despues se rompe: sin rollback quedaria la tabla suelta.
+    with open(os.path.join(migs, "004_rota.sql"), "w") as handle:
+        handle.write("CREATE TABLE prueba (id INTEGER);\n"
+                     "INSERT INTO tabla_que_no_existe (x) VALUES (1);\n"
+                     "PRAGMA user_version = 4;\n")
+
+    work2 = tempfile.mkdtemp()
+    db2 = os.path.join(work2, "petcrm.db")
+    conn = sqlite3.connect(db2)
+    for name in ("001_initial.sql", "002_resumen.sql"):
+        conn.executescript(
+            (BASE_DIR / "migrations" / name).read_text(encoding="utf-8"))
+    conn.execute("INSERT INTO client (name, phone) VALUES ('Marta','+50761234567')")
+    conn.commit()
+    conn.close()
+
+    class Broken(DevelopmentConfig):
+        DB_PATH = db2
+        MIGRATIONS_DIR = migs
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+
+    logging.disable(logging.CRITICAL)
+    app = create_app(Broken)
+    logging.disable(logging.NOTSET)
+
+    conn = sqlite3.connect(db2)
+    check("la base vuelve a la version que tenia",
+          conn.execute("PRAGMA user_version").fetchone()[0] == 2)
+    check("los datos siguen intactos",
+          conn.execute("SELECT name FROM client").fetchone()[0] == "Marta")
+    check("no queda nada a medio crear",
+          conn.execute("SELECT COUNT(*) FROM sqlite_master "
+                       "WHERE name='prueba'").fetchone()[0] == 0)
+    conn.close()
+
+    body = app.test_client().get("/").get_data(as_text=True)
+    check("la pantalla explica que no se pudo",
+          "No se pudo actualizar la base sola" in body)
+    check("nombra la migracion que fallo", "004_rota.sql" in body)
+    check("y dice que los datos quedaron como estaban", "como estaban" in body)
+
+    for folder in (work, work2, migs):
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def run_schema_guard(_unused):
     """Codigo y base desalineados: tiene que verse, no reventar.
 
@@ -341,6 +445,7 @@ def run_schema_guard(_unused):
             DB_PATH = path
             TESTING = True
             WTF_CSRF_ENABLED = False
+            AUTO_MIGRATE = False        # se prueba la guardia, no el arreglo
         return create_app(Cfg).test_client()
 
     print("\nBase sin crear")
@@ -615,7 +720,7 @@ def shift_of(app, iso, days):
 
 if __name__ == "__main__":
     for runner in (run_flow, run_csrf, run_stats, run_interface,
-                   run_schema_guard):
+                   run_schema_guard, run_auto_migrate):
         path = fresh_db()
         try:
             runner(path)
