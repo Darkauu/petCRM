@@ -1,6 +1,11 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Clientes{% endblock %}
 {% block heading %}Clientes{% endblock %}
+{% block topaction %}
+  <a class="topaction btn btn-sm" href="{{ url_for('clients.create') }}">
+    {{ icon('mas', 18) }} Nuevo cliente</a>
+{% endblock %}
 
 {% block content %}
   {# Mismo componente que en registrar visita; solo cambia a donde
@@ -44,5 +49,6 @@
     </div>
   {% endif %}
 
-  <a class="fab" href="{{ url_for('clients.create') }}" aria-label="Nuevo cliente">+</a>
+  <a class="fab" href="{{ url_for('clients.create') }}"
+     aria-label="Nuevo cliente">{{ icon('mas', 26) }}</a>
 {% endblock %}

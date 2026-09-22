@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Ajustes{% endblock %}
 {% block heading %}Ajustes{% endblock %}
 {% block back %}<a class="back" href="{{ url_for('main.home') }}">Volver</a>{% endblock %}
@@ -48,7 +49,8 @@
   </p>
   <form method="post" action="{{ url_for('auth.logout') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-ghost btn-big" type="submit">Cerrar sesión</button>
+    <button class="btn btn-ghost btn-big" type="submit">
+      {{ icon('salir', 18) }} Cerrar sesión</button>
   </form>
 </div>
 {% endblock %}

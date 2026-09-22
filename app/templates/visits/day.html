@@ -1,19 +1,26 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% from "visits/_row.html" import visit_row %}
 {% block title %}Visitas{% endblock %}
 {% block heading %}{{ 'Hoy' if is_today else day }}{% endblock %}
+{% block topaction %}
+  <a class="topaction btn btn-sm" href="{{ url_for('visits.pick_client') }}">
+    {{ icon('mas', 18) }} Registrar visita</a>
+{% endblock %}
 
 {% block content %}
   <nav class="daynav">
     <a class="btn btn-sm btn-ghost"
-       href="{{ url_for('visits.index', dia=prev_day) }}">◀</a>
+       href="{{ url_for('visits.index', dia=prev_day) }}"
+       aria-label="Día anterior">{{ icon('anterior', 18) }}</a>
     {% if not is_today %}
       <a class="btn btn-sm btn-ghost" href="{{ url_for('visits.index') }}">Hoy</a>
     {% else %}
       <span class="daynav-label">{{ day | fecha(true) }}</span>
     {% endif %}
     <a class="btn btn-sm btn-ghost"
-       href="{{ url_for('visits.index', dia=next_day) }}">▶</a>
+       href="{{ url_for('visits.index', dia=next_day) }}"
+       aria-label="Día siguiente">{{ icon('siguiente', 18) }}</a>
   </nav>
 
   <div class="tiles">
@@ -43,5 +50,5 @@
   {% endif %}
 
   <a class="fab" href="{{ url_for('visits.pick_client') }}"
-     aria-label="Registrar visita">+</a>
+     aria-label="Registrar visita">{{ icon('mas', 26) }}</a>
 {% endblock %}

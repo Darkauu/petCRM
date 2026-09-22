@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}A quién escribirle{% endblock %}
 {% block heading %}A quién escribirle{% endblock %}
 {% block back %}<a class="back" href="{{ url_for('stats.summary') }}">Volver</a>{% endblock %}
@@ -22,7 +23,7 @@
             </span>
           </a>
           <a class="btn btn-sm btn-wa" href="https://wa.me/{{ row.phone[1:] }}"
-             target="_blank" rel="noopener">Escribirle</a>
+             target="_blank" rel="noopener">{{ icon('whatsapp', 16) }} Escribirle</a>
         </li>
       {% endfor %}
     </ul>

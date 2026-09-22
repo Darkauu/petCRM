@@ -11,3 +11,11 @@ __pycache__/
 identifier.sqlite
 .DS_Store
 
+
+# Skills de diseno instaladas con:
+#   npx skills add "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill"
+# Son 11 MB, casi todo fuentes para render. Herramienta de trabajo, no
+# parte de la aplicacion: se reinstalan con ese mismo comando y no tienen
+# por que viajar en cada clon ni en cada despliegue.
+.agents/
+.claude/skills/

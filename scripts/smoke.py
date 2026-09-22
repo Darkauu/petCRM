@@ -379,6 +379,13 @@ def run_auth(db_path):
         "password": "clave-de-prueba", "password2": "otra-distinta"})
     check("dos contrasenias distintas se rechazan",
           r.status_code == 400 and "no coinciden" in r.get_data(as_text=True))
+    larga = "a" * 5000
+    r = client.post("/crear-cuenta", data={
+        "display_name": "Alejandro", "email": "duenio@ejemplo.com",
+        "password": larga, "password2": larga})
+    check("una contrasenia absurdamente larga se rechaza en vez de "
+          "quemar CPU en el hash",
+          r.status_code == 400 and "ximo 200" in r.get_data(as_text=True))
 
     r = client.post("/crear-cuenta", data={
         "display_name": "Alejandro", "email": "duenio@ejemplo.com",
@@ -413,6 +420,79 @@ def run_auth(db_path):
                                      "password": "clave-de-prueba"})
     check("con la contrasenia correcta si entra",
           r.status_code == 302 and client.get("/").status_code == 200)
+
+    print("\nA donde manda despues de entrar")
+    def sesion_limpia():
+        c = create_app(Cfg).test_client()
+        c.post("/entrar", data={"email": "duenio@ejemplo.com",
+                                "password": "clave-de-prueba"})
+        return c
+
+    # Sin esto, un enlace /entrar?next=https://sitio-falso manda al
+    # duenio a una copia justo despues de entrar, que es cuando menos
+    # sospecha.
+    for destino in ("https://sitio-falso.example/robar",
+                    "//sitio-falso.example/robar",
+                    "/\\sitio-falso.example",
+                    "javascript:alert(1)"):
+        c = create_app(Cfg).test_client()
+        r = c.post(f"/entrar?next={destino}",
+                   data={"email": "duenio@ejemplo.com",
+                         "password": "clave-de-prueba"})
+        if r.headers.get("Location") != "/":
+            check(f"se bloquea el salto fuera del sitio ({destino})", False,
+                  r.headers.get("Location"))
+            break
+    else:
+        check("un destino fuera del sitio se ignora y se va al inicio", True)
+
+    c = create_app(Cfg).test_client()
+    r = c.post("/entrar?next=/clientes/",
+               data={"email": "duenio@ejemplo.com", "password": "clave-de-prueba"})
+    check("pero un destino del propio sitio si se respeta",
+          r.headers.get("Location") == "/clientes/", r.headers.get("Location"))
+
+    print("\nSalir de verdad")
+    c = sesion_limpia()
+    check("entro", c.get("/").status_code == 200)
+    c.post("/salir")
+    r = c.get("/")
+    check("tras salir no se vuelve a entrar solo con la cookie de recordarme",
+          r.status_code == 302 and "/entrar" in r.headers["Location"],
+          f"{r.status_code} {r.headers.get('Location')}")
+
+    print("\nInyeccion SQL")
+    c = sesion_limpia()
+    veneno = "Robert'); DROP TABLE client;--"
+    r = c.post("/clientes/nuevo", data={"name": veneno, "phone": "6555-1234"})
+    check("un nombre con SQL adentro se guarda, no se ejecuta",
+          r.status_code == 302, r.status_code)
+    conn = sqlite3.connect(db_path)
+    tablas = [row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")]
+    check("la tabla client sigue existiendo", "client" in tablas)
+    guardado = conn.execute(
+        "SELECT name FROM client ORDER BY id DESC LIMIT 1").fetchone()[0]
+    conn.close()
+    check("y el texto quedo tal cual, literal", guardado == veneno, guardado)
+
+    body = c.get("/clientes/?q=" + "%27+OR+1%3D1--").get_data(as_text=True)
+    check("una busqueda con comilla no rompe ni devuelve todo",
+          "Nadie coincide" in body or "DROP" in body, body[:200])
+
+    # Guardia estatica. Buscar cadenas sospechosas dentro del SQL es
+    # fragil; la invariante que de verdad sostiene todo es otra: la capa
+    # de datos no conoce la peticion. Todo lo que viene de afuera entra
+    # como parametro de una funcion, y de ahi solo sale por un '?'.
+    import re as _re
+    usa_peticion = _re.compile(r"\brequest\.|^\s*from flask import .*\brequest\b",
+                               _re.MULTILINE)
+    culpables = []
+    for archivo in sorted((BASE_DIR / "app" / "repos").glob("*.py")):
+        if usa_peticion.search(archivo.read_text(encoding="utf-8")):
+            culpables.append(archivo.name)
+    check("ningun modulo de datos toca la peticion: lo de afuera solo "
+          "entra como parametro", not culpables, culpables)
 
     print("\nFreno a los intentos repetidos")
     client.post("/salir")

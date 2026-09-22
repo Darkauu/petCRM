@@ -31,6 +31,13 @@ class Config:
     SESSION_COOKIE_SECURE = False   # True en produccion (HTTPS)
     PERMANENT_SESSION_LIFETIME = 60 * 60 * 12
 
+    # 'Recordarme' vive mas que la sesion, asi que necesita las
+    # mismas defensas o seria la puerta floja.
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = "Lax"
+    REMEMBER_COOKIE_SECURE = False        # True en produccion
+    REMEMBER_COOKIE_DURATION = 60 * 60 * 24 * 30
+
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024   # limite de subida (import Excel)
 
     # El plazo de atraso y los dias que abre el negocio viven en la
@@ -47,6 +54,7 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
     SESSION_COOKIE_SECURE = True
+    REMEMBER_COOKIE_SECURE = True
 
     def __init__(self):
         if not Config.SECRET_KEY or len(Config.SECRET_KEY) < 32:
