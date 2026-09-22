@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Inicio{% endblock %}
-{% block heading %}Inicio{% endblock %}
+{% block title %}{{ biz_name or 'Inicio' }}{% endblock %}
+{% block heading %}{{ biz_name or 'Inicio' }}{% endblock %}
 
 {% block content %}
   <a class="btn btn-big btn-hero"
@@ -34,6 +34,7 @@
 
   <div class="stack">
     <a class="btn btn-ghost" href="{{ url_for('clients.create') }}">Nuevo cliente</a>
+    <a class="btn btn-ghost" href="{{ url_for('settings.edit') }}">Ajustes</a>
   </div>
 
   {% if service_count == 0 %}

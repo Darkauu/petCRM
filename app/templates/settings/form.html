@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Ajustes{% endblock %}
+{% block heading %}Ajustes{% endblock %}
+{% block back %}<a class="back" href="{{ url_for('main.home') }}">Volver</a>{% endblock %}
+
+{% block content %}
+<form method="post" class="form" novalidate action="{{ url_for('settings.edit') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label class="field">
+    <span>Nombre del negocio</span>
+    <input name="business_name" value="{{ business_name }}" autocapitalize="words">
+  </label>
+
+  <fieldset class="field {{ 'bad' if errors.working_days }}">
+    <legend>Días que abres</legend>
+    <p class="hint">
+      Los días que no abres dejan de contarse como huecos en el resumen.
+    </p>
+    {% for value, label in weekdays %}
+      <label class="check">
+        <input type="checkbox" name="working_days" value="{{ value }}"
+               {{ 'checked' if value in working }}>
+        <span>{{ label }}</span>
+      </label>
+    {% endfor %}
+    {% if errors.working_days %}<em>{{ errors.working_days }}</em>{% endif %}
+  </fieldset>
+
+  <label class="field {{ 'bad' if errors.followup_days }}">
+    <span>Días para considerar que un cliente se atrasó</span>
+    <input name="followup_days" inputmode="numeric" value="{{ follow }}">
+    <p class="hint">
+      Pasado ese tiempo sin venir, el cliente aparece en la lista de
+      atrasados y en su ficha sale el botón de WhatsApp.
+    </p>
+    {% if errors.followup_days %}<em>{{ errors.followup_days }}</em>{% endif %}
+  </label>
+
+  <button class="btn btn-big" type="submit">Guardar</button>
+</form>
+{% endblock %}

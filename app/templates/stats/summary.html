@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Resumen{% endblock %}
+{% block heading %}Resumen{% endblock %}
+
+{% block content %}
+  <nav class="chips">
+    {% for key, label in periods %}
+      <a class="chip-link {{ 'on' if period == key }}"
+         href="{{ url_for('stats.summary', p=key) }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <p class="range">{{ desde | fecha }} — {{ hasta | fecha }}</p>
+
+  {# El hueco va antes que las cifras. Si faltan dias, los totales de
+     abajo estan incompletos y decirlo despues seria tarde. #}
+  {% if gaps %}
+    <div class="gap">
+      <strong>{{ gaps | length }} {{ 'día' if gaps | length == 1 else 'días' }} sin registrar</strong>
+      <p>{% for day in gaps %}{{ day | fecha(true) }}{{ ', ' if not loop.last }}{% endfor %}</p>
+      <p class="gap-note">
+        Si trabajaste esos días, lo de abajo está incompleto.
+        Si cierras alguno, <a href="{{ url_for('settings.edit') }}">márcalo en Ajustes</a>
+        para que deje de aparecer.
+      </p>
+    </div>
+  {% endif %}
+
+  {% if empty_visits %}
+    <div class="gap">
+      <strong>{{ empty_visits | length }} {{ 'visita' if empty_visits | length == 1 else 'visitas' }} sin servicios</strong>
+      <p>
+        {% for row in empty_visits %}
+          <a href="{{ url_for('visits.edit', visit_id=row.id) }}">{{ row.client_name }}
+            ({{ row.visit_date | fecha }})</a>{{ ', ' if not loop.last }}
+        {% endfor %}
+      </p>
+      <p class="gap-note">Cuentan como $0.00 en el total.</p>
+    </div>
+  {% endif %}
+
+  <div class="tiles">
+    <div class="tile tile-flat">
+      <span class="tile-n">{{ now.pets }}</span>
+      <span class="tile-l">{{ 'perro atendido' if now.pets == 1 else 'perros atendidos' }}</span>
+    </div>
+    <div class="tile tile-flat">
+      <span class="tile-n">{{ now.visits }}</span>
+      <span class="tile-l">{{ 'visita' if now.visits == 1 else 'visitas' }}</span>
+    </div>
+  </div>
+
+  <div class="headline">
+    <span class="headline-n">{{ now.cents | money }}</span>
+    <span class="headline-l">facturado</span>
+    {% if delta is not none %}
+      <span class="delta {{ 'up' if delta >= 0 else 'down' }}">
+        {{ '+' if delta > 0 }}{{ delta }}% vs. {{ before.cents | money }} del período anterior
+      </span>
+    {% elif before.cents == 0 and now.cents > 0 %}
+      <span class="delta">sin nada que comparar en el período anterior</span>
+    {% endif %}
+    {% if avg_cents is not none %}
+      <span class="delta">{{ avg_cents | money }} por perro en promedio</span>
+    {% endif %}
+  </div>
+
+  <h2 class="section">Qué pesa más</h2>
+  {% if services %}
+    {% set top = services | map(attribute='cents') | max %}
+    <ul class="bars">
+      {% for row in services %}
+        <li>
+          <span class="bar-head">
+            <span>{{ row.name }}</span>
+            <span class="amount">{{ row.cents | money }}</span>
+          </span>
+          <span class="bar-track">
+            <span class="bar-fill" style="width: {{ (row.cents * 100 / top) | round | int }}%"></span>
+          </span>
+          <span class="bar-sub">{{ row.times }}
+            {{ 'vez' if row.times == 1 else 'veces' }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="hint">No hay servicios cobrados en este período.</p>
+  {% endif %}
+
+  <h2 class="section">Clientes</h2>
+  <div class="tiles">
+    <div class="tile tile-flat">
+      <span class="tile-n">{{ clients.recurrentes }}</span>
+      <span class="tile-l">volvieron</span>
+    </div>
+    <div class="tile tile-flat">
+      <span class="tile-n">{{ clients.nuevos }}</span>
+      <span class="tile-l">{{ 'nuevo' if clients.nuevos == 1 else 'nuevos' }}</span>
+    </div>
+  </div>
+
+  {% if overdue %}
+    <a class="callout" href="{{ url_for('stats.overdue') }}">
+      <strong>{{ overdue }}
+        {{ 'cliente lleva' if overdue == 1 else 'clientes llevan' }}
+        más de {{ follow }} días sin venir</strong>
+      <span>Ver a quién escribirle →</span>
+    </a>
+  {% else %}
+    <p class="hint">
+      Nadie pasa de {{ follow }} días sin venir.
+      <a href="{{ url_for('settings.edit') }}">Cambiar el plazo</a>.
+    </p>
+  {% endif %}
+{% endblock %}

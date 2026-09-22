@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>{% block title %}PetCRM{% endblock %}</title>
+  <title>{% block title %}{{ biz_name or 'PetCRM' }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
@@ -12,7 +12,7 @@
 <header class="topbar">
   <div class="topbar-inner">
     {% block back %}{% endblock %}
-    <h1>{% block heading %}PetCRM{% endblock %}</h1>
+    <h1>{% block heading %}{{ biz_name or 'PetCRM' }}{% endblock %}</h1>
     {% block topaction %}{% endblock %}
   </div>
 </header>
@@ -34,6 +34,8 @@
      class="{{ 'on' if request.endpoint == 'main.home' }}">Inicio</a>
   <a href="{{ url_for('visits.index') }}"
      class="{{ 'on' if request.blueprint == 'visits' }}">Visitas</a>
+  <a href="{{ url_for('stats.summary') }}"
+     class="{{ 'on' if request.blueprint == 'stats' }}">Resumen</a>
   <a href="{{ url_for('clients.index') }}"
      class="{{ 'on' if request.blueprint in ('clients', 'pets') }}">Clientes</a>
   <a href="{{ url_for('services.index') }}"

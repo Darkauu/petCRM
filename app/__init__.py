@@ -20,6 +20,7 @@ def create_app(config_object=None):
 
     _register_blueprints(app)
     _register_error_handlers(app)
+    _register_context(app)
 
     @app.get("/health")
     def health():
@@ -33,13 +34,34 @@ def _register_blueprints(app):
     from app.blueprints.main import bp as main_bp
     from app.blueprints.pets import bp as pets_bp
     from app.blueprints.services import bp as services_bp
+    from app.blueprints.settings import bp as settings_bp
+    from app.blueprints.stats import bp as stats_bp
     from app.blueprints.visits import bp as visits_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(clients_bp)
     app.register_blueprint(pets_bp)
     app.register_blueprint(services_bp)
+    app.register_blueprint(settings_bp)
+    app.register_blueprint(stats_bp)
     app.register_blueprint(visits_bp)
+
+
+def _register_context(app):
+    """Nombre del negocio y plazo de atraso, disponibles en toda plantilla."""
+    from app.repos import settings
+
+    @app.context_processor
+    def inject_business():
+        try:
+            return {
+                "biz_name": settings.business_name(),
+                "follow_days": settings.followup_days(),
+            }
+        except Exception:
+            # Las paginas de error tienen que poder pintarse aunque la
+            # base no responda; si no, un fallo se vuelve dos.
+            return {"biz_name": "", "follow_days": 15}
 
 
 def _register_error_handlers(app):

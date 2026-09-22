@@ -23,9 +23,8 @@ class Config:
 
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024   # limite de subida (import Excel)
 
-    # Dias sin venir a partir de los cuales una mascota se marca como
-    # atrasada. Es un valor provisional del negocio, no una regla fija.
-    FOLLOWUP_DAYS = 15
+    # El plazo de atraso y los dias que abre el negocio viven en la
+    # tabla setting, editables desde Ajustes: son criterio del duenio.
 
 
 class DevelopmentConfig(Config):
