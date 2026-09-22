@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Falta actualizar la base{% endblock %}
+{% block heading %}Falta un paso{% endblock %}
+
+{% block content %}
+  <div class="gap">
+    {% if empty %}
+      <strong>La base de datos todavía no está creada.</strong>
+      <p>Por eso no se puede guardar ni mostrar nada.</p>
+    {% elif missing > 0 %}
+      <strong>La base de datos está desactualizada.</strong>
+      <p>
+        El programa necesita la versión {{ expected }} y la base está en la
+        {{ found }}. {{ 'Falta aplicar 1 cambio.' if missing == 1
+           else 'Faltan aplicar ' ~ missing ~ ' cambios.' }}
+      </p>
+    {% else %}
+      <strong>La base de datos es más nueva que el programa.</strong>
+      <p>
+        La base está en la versión {{ found }} y este programa solo conoce
+        hasta la {{ expected }}.
+      </p>
+    {% endif %}
+  </div>
+
+  {% if empty %}
+    <p>Para crearla, desde la carpeta del proyecto:</p>
+    <pre class="cmd">python scripts/init_db.py</pre>
+  {% elif missing > 0 %}
+    <p>Para ponerla al día, desde la carpeta del proyecto:</p>
+    <pre class="cmd">python scripts/migrate.py</pre>
+    <p class="hint">
+      Tus clientes, mascotas y visitas no se tocan: solo se agrega lo que
+      el programa nuevo necesita. Si usas un entorno virtual, el comando
+      es <code>.venv/bin/python scripts/migrate.py</code>.
+    </p>
+  {% else %}
+    <p>
+      Esto pasa cuando se actualizó la base pero se volvió a una versión
+      anterior del programa. Actualiza el programa:
+    </p>
+    <pre class="cmd">git pull</pre>
+  {% endif %}
+
+  <p class="hint">
+    Esta pantalla se quita sola en cuanto el comando termine. No hace falta
+    reiniciar nada: solo recarga.
+  </p>
+{% endblock %}

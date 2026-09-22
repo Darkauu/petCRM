@@ -1,8 +1,8 @@
 """Application factory."""
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_wtf.csrf import CSRFError, CSRFProtect
 
-from app import database, labels, money, phone
+from app import database, labels, money, phone, schema
 from app.config import get_config
 
 csrf = CSRFProtect()
@@ -21,10 +21,16 @@ def create_app(config_object=None):
     _register_blueprints(app)
     _register_error_handlers(app)
     _register_context(app)
+    _register_schema_guard(app)
 
     @app.get("/health")
     def health():
-        return {"status": "ok"}
+        found = schema.current_version(database.get_db())
+        expected = app.config["SCHEMA_VERSION"]
+        if found != expected:
+            return {"status": "schema_mismatch",
+                    "schema": found, "expected": expected}, 503
+        return {"status": "ok", "schema": found}
 
     return app
 
@@ -45,6 +51,36 @@ def _register_blueprints(app):
     app.register_blueprint(settings_bp)
     app.register_blueprint(stats_bp)
     app.register_blueprint(visits_bp)
+
+
+def _register_schema_guard(app):
+    """Corta el paso cuando la base y el codigo no van a la misma version.
+
+    Sin esto, una base sin migrar no falla al arrancar: falla mas tarde,
+    con un error de SQLite crudo, justo cuando se intenta guardar algo.
+    """
+    expected = schema.expected_version(app.config["MIGRATIONS_DIR"])
+    app.config["SCHEMA_VERSION"] = expected
+
+    @app.before_request
+    def guard():
+        # 'static' queda fuera o la pagina de error se veria sin estilos.
+        # 'health' responde el desajuste en JSON, para poder vigilarlo.
+        if request.endpoint in ("static", "health"):
+            return None
+
+        db = database.get_db()
+        found = schema.current_version(db)
+        if found == expected:
+            return None
+
+        return render_template(
+            "errors/schema.html",
+            found=found,
+            expected=expected,
+            missing=expected - found,
+            empty=schema.is_empty(db),
+        ), 503
 
 
 def _register_context(app):
