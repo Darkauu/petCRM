@@ -60,7 +60,11 @@ def servicio(name, description, prices):
 
 
 def build(phone_for_whatsapp):
-    """Cada cliente existe para mostrar un estado distinto."""
+    """Cada cliente existe para mostrar un estado distinto.
+
+    Si un telefono ya es de alguien, ese cliente se salta y los demas se
+    siembran igual: mas vale una demostracion incompleta que ninguna.
+    """
     bano = servicio("Baño completo", "Baño, secado y cepillado",
                     {"small": 1500, "medium": 2000, "large": 2800})
     corte = servicio("Corte de pelo", None,
@@ -70,49 +74,52 @@ def build(phone_for_whatsapp):
     hoy = today()
     hecho = []
 
-    # 1. El caso que se quiere ver: atrasado hace mucho.
-    #    Su telefono es el que se pase por --telefono, para poder tocar
-    #    "Escribirle" y que WhatsApp abra de verdad.
-    ana = clients.create({
-        "name": "Ana Vega", "phone": phone_for_whatsapp[0],
-        "phone_display": phone_for_whatsapp[1], "document": None,
-        "email": None, "address": None, "notes": NOTE,
-    })
-    rocky = pets.create(_pet(ana, "Rocky", "medium", breed="Cocker",
-                             temperament="se mueve mucho al secar"))
-    visits.create(ana, shift(hoy, -62), "Vino con las uñas muy largas",
-                  [(rocky, bano, 2000), (rocky, unias, 500)],
-                  status="completed")
-    hecho.append(("Ana Vega", "atrasada hace 62 días — sale de primera en la lista"))
+    # 1. El caso que se quiere ver: atrasado hace mucho. Su telefono es
+    #    el que se pase por --telefono, para poder tocar "Escribirle" y
+    #    que WhatsApp abra de verdad.
+    ana = crear_cliente("Ana Vega", phone_for_whatsapp[1])
+    if ana:
+        rocky = pets.create(_pet(ana, "Rocky", "medium", breed="Cocker",
+                                 temperament="se mueve mucho al secar"))
+        visits.create(ana, shift(hoy, -62), "Vino con las uñas muy largas",
+                      [(rocky, bano, 2000), (rocky, unias, 500)],
+                      status="completed")
+        hecho.append(("Ana Vega",
+                      "atrasada hace 62 días — sale de primera en la lista"))
 
     # 2. Atrasado, pero apenas pasado del plazo.
-    beto = clients.create(_client("Beto Lima", "6033-4455"))
-    kira = pets.create(_pet(beto, "Kira", "small", breed="Schnauzer"))
-    visits.create(beto, shift(hoy, -21), None,
-                  [(kira, corte, 2500)], status="completed")
-    hecho.append(("Beto Lima", "atrasado hace 21 días — también sale"))
+    beto = crear_cliente("Beto Lima", "6033-4455")
+    if beto:
+        kira = pets.create(_pet(beto, "Kira", "small", breed="Schnauzer"))
+        visits.create(beto, shift(hoy, -21), None,
+                      [(kira, corte, 2500)], status="completed")
+        hecho.append(("Beto Lima", "atrasado hace 21 días — también sale"))
 
     # 3. Vino hace poco: NO debe salir en atrasados.
-    cira = clients.create(_client("Cira Paz", "6077-8899"))
-    nina = pets.create(_pet(cira, "Nina", "large", breed="Labrador"))
-    visits.create(cira, shift(hoy, -4), None,
-                  [(nina, bano, 2800)], status="completed")
-    hecho.append(("Cira Paz", "vino hace 4 días — NO sale en atrasados"))
+    cira = crear_cliente("Cira Paz", "6077-8899")
+    if cira:
+        nina = pets.create(_pet(cira, "Nina", "large", breed="Labrador"))
+        visits.create(cira, shift(hoy, -4), None,
+                      [(nina, bano, 2800)], status="completed")
+        hecho.append(("Cira Paz", "vino hace 4 días — NO sale en atrasados"))
 
     # 4. Dos mascotas, una sin visitas: el hueco tiene que verse.
-    dora = clients.create(_client("Dora Sáez", "6011-2233"))
-    toby = pets.create(_pet(dora, "Toby", "small", breed="Poodle"))
-    luna = pets.create(_pet(dora, "Luna", "large"))
-    visits.create(dora, shift(hoy, -30), None,
-                  [(toby, bano, 1500), (toby, corte, 2500)],
-                  status="completed")
-    hecho.append(("Dora Sáez", "Toby atrasado, Luna sin visitas registradas"))
+    dora = crear_cliente("Dora Sáez", "6011-2233")
+    if dora:
+        toby = pets.create(_pet(dora, "Toby", "small", breed="Poodle"))
+        pets.create(_pet(dora, "Luna", "large"))
+        visits.create(dora, shift(hoy, -30), None,
+                      [(toby, bano, 1500), (toby, corte, 2500)],
+                      status="completed")
+        hecho.append(("Dora Sáez", "Toby atrasado, Luna sin visitas registradas"))
 
     # 5. Recibida hoy y sin cobrar: el flujo de cobro al entregar.
-    elsa = clients.create(_client("Elsa Mora", "6044-5566"))
-    max_ = pets.create(_pet(elsa, "Max", "medium"))
-    visits.create(elsa, hoy, None, [(max_, bano, 2000), (max_, unias, 500)])
-    hecho.append(("Elsa Mora", "recibida hoy, pendiente de cobro ($25.00)"))
+    elsa = crear_cliente("Elsa Mora", "6044-5566")
+    if elsa:
+        max_ = pets.create(_pet(elsa, "Max", "medium"))
+        visits.create(elsa, hoy, None,
+                      [(max_, bano, 2000), (max_, unias, 500)])
+        hecho.append(("Elsa Mora", "recibida hoy, pendiente de cobro ($25.00)"))
 
     return hecho
 
@@ -122,6 +129,23 @@ def _client(name, phone_display):
     e164, display = normalize_phone(phone_display)
     return {"name": name, "phone": e164, "phone_display": display,
             "document": None, "email": None, "address": None, "notes": NOTE}
+
+
+def crear_cliente(name, phone_display):
+    """Devuelve el id, o None si ese telefono ya es de alguien.
+
+    Puede pasar: si un cliente de verdad tiene uno de estos numeros, el
+    indice unico lo rechaza. Antes eso era un traceback de SQLite a
+    mitad de la siembra; ahora se salta ese cliente, se dice cual y por
+    que, y el resto se siembra igual.
+    """
+    data = _client(name, phone_display)
+    ocupado = clients.find_by_phone(data["phone"])
+    if ocupado is not None:
+        print(f"  (se omite {name}: el {phone_display} ya es de "
+              f"{ocupado['name']})")
+        return None
+    return clients.create(data)
 
 
 def _pet(client_id, name, size, breed=None, temperament=None):
@@ -166,8 +190,14 @@ if __name__ == "__main__":
         existing = clients.count_active()
         if existing and not args.force:
             raise SystemExit(
-                f"La base ya tiene {existing} cliente(s). "
-                "Si de verdad quieres sembrar encima, usa --force."
+                f"La base ya tiene {existing} cliente(s).\n"
+                "\n"
+                "Con --force se AGREGAN los de prueba sin tocar los tuyos:\n"
+                "solo se reemplazan los que haya sembrado este mismo script,\n"
+                "reconocibles por su nota. Tus clientes, visitas y tu cuenta\n"
+                "quedan como estan.\n"
+                "\n"
+                f"    python scripts/seed.py --force --telefono {args.telefono}"
             )
         if args.force:
             borrados = limpiar()

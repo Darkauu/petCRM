@@ -809,8 +809,11 @@ def run_seed(_unused):
 
     print("\nY no hace danio donde no debe")
     r = sembrar()
+    salida = r.stdout + r.stderr
     check("se niega a sembrar sobre una base con clientes",
-          r.returncode != 0 and "usa --force" in r.stdout + r.stderr)
+          r.returncode != 0 and "ya tiene" in salida)
+    check("y explica que --force NO borra lo ajeno, que es lo que asusta",
+          "sin tocar los tuyos" in salida and "quedan como estan" in salida)
 
     with app.app_context():
         from werkzeug.security import generate_password_hash
@@ -836,7 +839,45 @@ def run_seed(_unused):
               real is not None
               and check_password_hash(real["password_hash"], "clave-real"))
 
+    print("\nSi un telefono de prueba ya es de alguien")
+    work2 = tempfile.mkdtemp()
+    db2 = os.path.join(work2, "petcrm.db")
+    entorno2 = dict(os.environ, DB_PATH=db2, AUTO_BACKUP="0")
+    subprocess.run([sys.executable, str(BASE_DIR / "scripts" / "init_db.py")],
+                   cwd=str(BASE_DIR), env=entorno2, capture_output=True)
+
+    class Otra(DevelopmentConfig):
+        DB_PATH = db2
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    with create_app(Otra).app_context():
+        from app.database import get_db
+        from app.repos import clients as rc
+        rc.create({"name": "Donia Marta", "phone": "+50760334455",
+                   "phone_display": "6033-4455", "document": None,
+                   "email": None, "address": None, "notes": None})
+        get_db().commit()
+
+    r = subprocess.run(
+        [sys.executable, str(BASE_DIR / "scripts" / "seed.py"), "--force"],
+        cwd=str(BASE_DIR), env=entorno2, capture_output=True, text=True)
+    check("no revienta contra el indice unico", r.returncode == 0,
+          r.stderr[-300:])
+    check("dice cual se salto y de quien es ese numero",
+          "se omite Beto Lima" in r.stdout and "Donia Marta" in r.stdout,
+          r.stdout)
+    check("y siembra los demas igual: mejor incompleto que nada",
+          "Ana Vega" in r.stdout and "Elsa Mora" in r.stdout)
+
+    with create_app(Otra).app_context():
+        from app.repos import clients as rc2
+        check("queda el real mas los cuatro que si entraron",
+              rc2.count_active() == 5, rc2.count_active())
+
     shutil.rmtree(work, ignore_errors=True)
+    shutil.rmtree(work2, ignore_errors=True)
 
 
 def run_schema_guard(_unused):
