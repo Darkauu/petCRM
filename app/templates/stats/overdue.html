@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}A quién escribirle{% endblock %}
+{% block heading %}A quién escribirle{% endblock %}
+{% block back %}<a class="back" href="{{ url_for('stats.summary') }}">Volver</a>{% endblock %}
+
+{% block content %}
+  {% if rows %}
+    <p class="hint">
+      Del más atrasado al menos. Pasaron más de {{ follow }} días desde su
+      última visita.
+    </p>
+    <ul class="list">
+      {% for row in rows %}
+        <li>
+          <a href="{{ url_for('clients.detail', client_id=row.id) }}">
+            <span class="list-title">
+              {{ row.name }}
+              <span class="amount">{{ row.days }} días</span>
+            </span>
+            <span class="list-sub">
+              {{ row.pet_names }} · última visita {{ row.last_visit_date | fecha }}
+            </span>
+          </a>
+          <a class="btn btn-sm btn-wa" href="https://wa.me/{{ row.phone[1:] }}"
+             target="_blank" rel="noopener">Escribirle</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty">
+      <p>Nadie pasa de {{ follow }} días sin venir.</p>
+      <a class="btn btn-ghost" href="{{ url_for('settings.edit') }}">Cambiar el plazo</a>
+    </div>
+  {% endif %}
+{% endblock %}

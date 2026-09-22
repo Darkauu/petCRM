@@ -37,7 +37,7 @@
 
             {% if pet.last_visit_date is none %}
               <span class="visit visit-none">Sin visitas registradas</span>
-            {% elif pet.days_since_visit > config.FOLLOWUP_DAYS %}
+            {% elif pet.days_since_visit > follow_days %}
               <span class="visit visit-late">
                 Hace {{ pet.days_since_visit }} días ({{ pet.last_visit_date }})
               </span>
@@ -49,7 +49,7 @@
           </a>
 
           {% if pet.last_visit_date is not none
-                and pet.days_since_visit > config.FOLLOWUP_DAYS
+                and pet.days_since_visit > follow_days
                 and pet.is_active %}
             <a class="btn btn-sm btn-wa"
                href="https://wa.me/{{ client.phone[1:] }}"
