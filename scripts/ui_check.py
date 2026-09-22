@@ -134,6 +134,54 @@ def run(page, url):
     check("pero aqui lleva a la ficha, no a registrar visita",
           page.url.rstrip("/").endswith("/clientes/2"), page.url)
 
+    print("\nDia y noche")
+    page.goto(f"{url}/resumen/")
+    fondo = lambda: page.evaluate(
+        "getComputedStyle(document.body).backgroundColor")
+    claro = fondo()
+    page.click("[data-tema]")
+    page.wait_for_timeout(200)
+    oscuro = fondo()
+    check("el interruptor cambia el fondo de verdad", claro != oscuro,
+          f"{claro} -> {oscuro}")
+    check("y deja marcado el tema elegido",
+          page.evaluate("document.documentElement.dataset.theme") == "dark")
+
+    page.goto(f"{url}/clientes/")
+    check("la eleccion sobrevive al cambiar de pantalla",
+          page.evaluate("document.documentElement.dataset.theme") == "dark"
+          and fondo() == oscuro)
+
+    page.reload()
+    check("y a recargar: queda guardada en el navegador",
+          page.evaluate("document.documentElement.dataset.theme") == "dark")
+
+    page.click("[data-tema]")
+    page.wait_for_timeout(200)
+    check("volver a tocarlo regresa al modo dia", fondo() == claro, fondo())
+
+    print("\nLa flecha de volver")
+    page.goto(f"{url}/clientes/1")
+    volver = page.locator(".back-icon")
+    check("existe y se ve", volver.is_visible())
+    check("tiene nombre accesible aunque sea un icono",
+          volver.get_attribute("aria-label") == "Volver")
+    propio = page.evaluate(
+        "getComputedStyle(document.querySelector('.back-icon')).backgroundColor")
+    cabecera = page.evaluate(
+        "getComputedStyle(document.querySelector('.topbar')).backgroundColor")
+    check("con fondo propio: no se confunde con la cabecera",
+          propio != cabecera and propio != "rgba(0, 0, 0, 0)",
+          f"{propio} vs {cabecera}")
+    caja = page.evaluate(
+        "() => { const b = document.querySelector('.back-icon')"
+        ".getBoundingClientRect(); return {w: b.width, h: b.height}; }")
+    check("y sigue siendo tocable con el pulgar",
+          caja["w"] >= 44 and caja["h"] >= 44, caja)
+    volver.click()
+    page.wait_for_url("**/clientes/", timeout=5000)
+    check("y lleva de vuelta", page.url.endswith("/clientes/"))
+
     print("\nConfirmacion propia de la aplicacion")
     page.goto(f"{url}/visitas/1/editar")
     dialog = page.locator("#confirm-dialog")
@@ -241,9 +289,29 @@ def run_responsive(browser, url):
           caja(page, ".topaction")["visible"])
 
     contenido = caja(page, ".wrap")
-    check("el contenido arranca justo despues de la barra, sin hueco",
-          abs(contenido["x"] - nav["w"]) < 2, (contenido, nav))
-    check("y no se estira hasta ser ilegible", contenido["w"] <= 1100, contenido)
+    izquierda = contenido["x"] - nav["w"]
+    derecha = 1280 - (contenido["x"] + contenido["w"])
+    check("el contenido va centrado en el espacio que deja la barra",
+          abs(izquierda - derecha) < 2, (izquierda, derecha))
+    check("y no se estira hasta ser ilegible", contenido["w"] <= 950, contenido)
+
+    # Dentro de esa columna, todo arranca en el mismo borde: si cada
+    # bloque se centrara por su cuenta, el texto no cuadraria con su
+    # propio encabezado. Se mide en el resumen, que es la pantalla con
+    # mas variedad de bloques.
+    page.goto(f"{url}/resumen/")
+    bordes = page.evaluate("""() => {
+      // ':not([hidden])' hace falta porque la lista del buscador
+      // comparte la clase .list y esta oculta: daria x = 0.
+      const sel = ['.chips', '.tiles', '.section', '.headline',
+                   '.list:not([hidden])'];
+      return sel.map(s => { const e = document.querySelector(s);
+        return e ? Math.round(e.getBoundingClientRect().x) : null; })
+        .filter(x => x !== null);
+    }""")
+    check("y dentro todo arranca en el mismo borde",
+          len(set(bordes)) == 1, bordes)
+    page.goto(f"{url}/clientes/")
 
     page.goto(f"{url}/clientes/nuevo")
     form = caja(page, ".form")

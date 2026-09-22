@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% from "visits/_row.html" import visit_row %}
 {% block title %}Pendientes de cobro{% endblock %}
 {% block heading %}Pendientes de cobro{% endblock %}
-{% block back %}<a class="back" href="{{ url_for('main.home') }}">Volver</a>{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('main.home') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
 
 {% block content %}
   {% if rows %}

@@ -154,6 +154,31 @@ document.querySelectorAll("form[data-confirm]").forEach(function (form) {
 })();
 
 
+// ---- Dia y noche ------------------------------------------------------
+// La eleccion se guarda en el navegador y la aplica el script en linea
+// de la cabecera, antes de pintar. Si no se ha elegido nada, manda la
+// preferencia del sistema.
+(function () {
+  var boton = document.querySelector("[data-tema]");
+  if (!boton) return;
+
+  boton.addEventListener("click", function () {
+    var raiz = document.documentElement;
+    var actual = raiz.dataset.theme;
+    if (!actual) {
+      actual = (window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches)
+        ? "dark" : "light";
+    }
+    var nuevo = (actual === "dark") ? "light" : "dark";
+    raiz.dataset.theme = nuevo;
+    try {
+      localStorage.setItem("tema", nuevo);
+    } catch (e) { /* navegacion privada: vale para esta pestania */ }
+  });
+})();
+
+
 // ---- Precio unico vs. precio por tamano en el formulario de servicio --
 document.querySelectorAll("[data-price-mode]").forEach(function (radio) {
   radio.addEventListener("change", function () {

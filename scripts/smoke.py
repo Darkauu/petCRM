@@ -327,6 +327,38 @@ def run_interface(db_path):
     check("y ahi tambien queda el formulario de siempre",
           'action="/clientes/"' in body and "Buscar</button>" in body)
 
+    print("\nCabecera")
+    body = client.get("/clientes/1").get_data(as_text=True)
+    check("volver es una flecha, no la palabra escrita",
+          ">Volver<" not in body and "<svg" in body.split("<main")[0])
+    check("y conserva su nombre para quien no ve el icono",
+          'aria-label="Volver"' in body)
+    check("con su propio fondo, para que no se pierda en la cabecera",
+          'class="back back-icon"' in body)
+    check("el boton de dia y noche esta en toda pantalla",
+          "data-tema" in body and "data-tema" in
+          client.get("/resumen/").get_data(as_text=True))
+
+    r = client.get("/resumen/")
+    body = r.get_data(as_text=True)
+    check("el resumen dice 'Demanda de servicio'", "Demanda de servicio" in body)
+    check("y ya no dice 'Qu\u00e9 pesa m\u00e1s'", "pesa m" not in body)
+
+    print("\nEl script del tema no abre la puerta a otros")
+    import re as _re
+    csp = r.headers["Content-Security-Policy"]
+    nonce_csp = _re.search(r"nonce-([\w-]+)", csp)
+    nonce_html = _re.search(r'<script nonce="([\w-]+)"', body)
+    check("el script en linea va firmado con un nonce",
+          bool(nonce_csp) and bool(nonce_html)
+          and nonce_csp.group(1) == nonce_html.group(1))
+    otro = _re.search(r"nonce-([\w-]+)",
+                      client.get("/resumen/").headers["Content-Security-Policy"])
+    check("y el nonce cambia en cada peticion, o no serviria de nada",
+          otro.group(1) != nonce_csp.group(1))
+    check("no se permitieron scripts en linea en general",
+          "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0])
+
     print("\nConfirmacion propia, no la del navegador")
     check("el dialogo viene en el layout", 'id="confirm-dialog"' in body)
     check("y por lo tanto en cualquier pantalla",
@@ -877,7 +909,7 @@ def run_stats(db_path):
           ">3<" in body and ">2<" in body)
     # Se mira solo la seccion de servicios: arriba hay mensajes flash
     # acumulados que tambien nombran los servicios.
-    barras = body[body.index("Qu\u00e9 pesa m\u00e1s"):]
+    barras = body[body.index("Demanda de servicio"):]
     check("ordena por plata y no por cantidad: corte 1 vez ($70) "
           "gana a bano 3 veces ($60)",
           barras.index("Corte") < barras.index("Bano"))

@@ -2,7 +2,7 @@
 {% from "_icons.html" import icon %}
 {% block title %}{{ client.name }}{% endblock %}
 {% block heading %}{{ client.name }}{% endblock %}
-{% block back %}<a class="back" href="{{ url_for('clients.index') }}">Volver</a>{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('clients.index') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
 {% block topaction %}
   <a class="back" href="{{ url_for('clients.edit', client_id=client.id) }}">Editar</a>
 {% endblock %}

@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% set editing = visit.id is defined and visit.id %}
 {% block title %}{{ 'Editar visita' if editing else 'Registrar visita' }}{% endblock %}
 {% block heading %}{{ client.name }}{% endblock %}
 {% block back %}
-  <a class="back" href="{{ url_for('visits.index') if editing else url_for('visits.pick_client') }}">Volver</a>
+  <a class="back back-icon" href="{{ url_for('visits.index') if editing else url_for('visits.pick_client') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>
 {% endblock %}
 
 {% block content %}

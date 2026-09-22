@@ -2,7 +2,7 @@
 {% from "_icons.html" import icon %}
 {% block title %}Ajustes{% endblock %}
 {% block heading %}Ajustes{% endblock %}
-{% block back %}<a class="back" href="{{ url_for('main.home') }}">Volver</a>{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('main.home') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
 
 {% block content %}
 <form method="post" class="form" novalidate action="{{ url_for('settings.edit') }}">
