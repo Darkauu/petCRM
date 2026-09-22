@@ -13,7 +13,6 @@ from flask import (Blueprint, flash, redirect, render_template, request,
 from app.clock import shift, today
 from app.forms import clean_visit
 from app.money import format_money
-from app.phone import format_phone
 from app.repos import clients, pets, services, visits
 
 bp = Blueprint("visits", __name__, url_prefix="/visitas")
@@ -38,29 +37,6 @@ def index():
         prev_day=shift(day, -1),
         next_day=shift(day, 1),
     )
-
-
-@bp.get("/buscar")
-def search_json():
-    """Coincidencias para el buscador que responde mientras se escribe.
-
-    Devuelve la URL ya armada por el servidor: la pantalla no tiene que
-    saber como se construyen las rutas.
-    """
-    term = (request.args.get("q") or "").strip()
-    if not term:
-        return {"rows": []}
-
-    rows = []
-    for row in clients.search(term, limit=8):
-        phone = row["phone_display"] or format_phone(row["phone"])
-        pets = row["pet_names"]
-        rows.append({
-            "name": row["name"],
-            "sub": f"{pets} \u00b7 {phone}" if pets else phone,
-            "url": url_for("visits.create", client_id=row["id"]),
-        })
-    return {"rows": rows}
 
 
 @bp.get("/pendientes")

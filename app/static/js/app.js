@@ -106,7 +106,10 @@ document.querySelectorAll("form[data-confirm]").forEach(function (form) {
     if (controller) controller.abort();
     controller = ("AbortController" in window) ? new AbortController() : null;
 
-    fetch(url + "?q=" + encodeURIComponent(term),
+    // La URL puede venir ya con parametros (destino=visita), asi que
+    // el separador se decide, no se asume.
+    var sep = (url.indexOf("?") === -1) ? "?" : "&";
+    fetch(url + sep + "q=" + encodeURIComponent(term),
           controller ? { signal: controller.signal } : undefined)
       .then(function (res) { return res.ok ? res.json() : { rows: [] }; })
       .then(function (data) { render(data.rows || []); })

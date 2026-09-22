@@ -108,6 +108,17 @@ def run(page, url):
     page.wait_for_timeout(600)
     check("sin coincidencias no queda el desplegable abierto", results.is_hidden())
 
+    print("\nEl mismo buscador en la lista de clientes")
+    page.goto(f"{url}/clientes/")
+    page.fill("input[type=search]", "kira")         # mascota de Beto
+    page.wait_for_selector("#search-results li", timeout=5000)
+    check("responde igual al escribir",
+          "Beto Lima" in results.inner_text(), results.inner_text())
+    page.click("#search-results a")
+    page.wait_for_url("**/clientes/2", timeout=5000)
+    check("pero aqui lleva a la ficha, no a registrar visita",
+          page.url.rstrip("/").endswith("/clientes/2"), page.url)
+
     print("\nConfirmacion propia de la aplicacion")
     page.goto(f"{url}/visitas/1/editar")
     dialog = page.locator("#confirm-dialog")

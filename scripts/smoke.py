@@ -277,25 +277,41 @@ def run_interface(db_path):
     client.post("/clientes/nuevo", data={"name": "Beto Lima", "phone": "60099887"})
 
     print("\nBuscador que responde al escribir")
-    data = client.get("/visitas/buscar?q=tob").get_json()
+    data = client.get("/clientes/buscar?q=tob").get_json()
     check("encuentra al duenio por el nombre de su perro",
           len(data["rows"]) == 1 and data["rows"][0]["name"] == "Marta Rios", data)
     check("trae las mascotas para distinguir homonimos",
           "Toby" in data["rows"][0]["sub"])
-    check("y la URL ya armada por el servidor",
-          data["rows"][0]["url"] == "/visitas/nueva/1")
     check("busca por telefono",
-          client.get("/visitas/buscar?q=6009").get_json()["rows"][0]["name"]
+          client.get("/clientes/buscar?q=6009").get_json()["rows"][0]["name"]
           == "Beto Lima")
     check("una busqueda vacia no devuelve el listin completo",
-          client.get("/visitas/buscar?q=").get_json()["rows"] == [])
+          client.get("/clientes/buscar?q=").get_json()["rows"] == [])
     check("sin coincidencias devuelve lista vacia y no un error",
-          client.get("/visitas/buscar?q=zzzz").get_json()["rows"] == [])
+          client.get("/clientes/buscar?q=zzzz").get_json()["rows"] == [])
+
+    # Un solo endpoint; 'destino' decide a donde lleva el resultado.
+    check("por defecto lleva a la ficha del cliente",
+          data["rows"][0]["url"] == "/clientes/1")
+    ida = client.get("/clientes/buscar?q=tob&destino=visita").get_json()
+    check("y con destino=visita, a registrarle una visita",
+          ida["rows"][0]["url"] == "/visitas/nueva/1")
+    raro = client.get("/clientes/buscar?q=tob&destino=inventado").get_json()
+    check("un destino desconocido cae a la ficha, no revienta",
+          raro["rows"][0]["url"] == "/clientes/1")
 
     body = client.get("/visitas/nueva").get_data(as_text=True)
-    check("la pantalla apunta al buscador", 'data-search-url="/visitas/buscar"' in body)
+    check("registrar visita apunta al buscador",
+          "data-search-url=" in body and "destino=visita" in body)
     check("el formulario sigue existiendo para cuando no hay JS",
           'action="/visitas/nueva"' in body and "Buscar</button>" in body)
+
+    body = client.get("/clientes/").get_data(as_text=True)
+    check("la lista de clientes usa el mismo buscador",
+          'data-search-url="/clientes/buscar"' in body
+          and 'id="search-results"' in body)
+    check("y ahi tambien queda el formulario de siempre",
+          'action="/clientes/"' in body and "Buscar</button>" in body)
 
     print("\nConfirmacion propia, no la del navegador")
     check("el dialogo viene en el layout", 'id="confirm-dialog"' in body)

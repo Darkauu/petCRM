@@ -6,7 +6,8 @@
 {% block content %}
   {# Con JS los resultados caen debajo mientras se escribe. Sin JS, el
      boton Buscar recarga la pagina como siempre. #}
-  <div class="typeahead" data-search-url="{{ url_for('visits.search_json') }}">
+  <div class="typeahead"
+       data-search-url="{{ url_for('clients.search_json', destino='visita') }}">
     <form class="search" method="get" action="{{ url_for('visits.pick_client') }}"
           role="search">
       <input type="search" name="q" value="{{ term }}" autocomplete="off"
