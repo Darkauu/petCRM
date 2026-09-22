@@ -17,6 +17,10 @@ def get(service_id):
     return query_one("SELECT * FROM service WHERE id = ?", (service_id,))
 
 
+def find_by_name(name):
+    return query_one("SELECT * FROM service WHERE name = ?", ((name or "").strip(),))
+
+
 def prices_map(service_ids=None):
     """{service_id: {size: price_cents}} para pintar el catalogo de un tiro."""
     rows = query_all(
