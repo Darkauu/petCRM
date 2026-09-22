@@ -3,6 +3,20 @@
 {% block heading %}Inicio{% endblock %}
 
 {% block content %}
+  <a class="btn btn-big btn-hero"
+     href="{{ url_for('visits.pick_client') }}">Registrar visita</a>
+
+  <a class="tiles tiles-link" href="{{ url_for('visits.index') }}">
+    <span class="tile tile-flat">
+      <span class="tile-n">{{ today_count }}</span>
+      <span class="tile-l">{{ 'visita hoy' if today_count == 1 else 'visitas hoy' }}</span>
+    </span>
+    <span class="tile tile-flat">
+      <span class="tile-n">{{ today_cents | money }}</span>
+      <span class="tile-l">cobrado hoy</span>
+    </span>
+  </a>
+
   <div class="tiles">
     <a class="tile" href="{{ url_for('clients.index') }}">
       <span class="tile-n">{{ client_count }}</span>
@@ -19,8 +33,7 @@
   </div>
 
   <div class="stack">
-    <a class="btn btn-big" href="{{ url_for('clients.create') }}">Nuevo cliente</a>
-    <a class="btn btn-ghost" href="{{ url_for('clients.index') }}">Buscar un cliente</a>
+    <a class="btn btn-ghost" href="{{ url_for('clients.create') }}">Nuevo cliente</a>
   </div>
 
   {% if service_count == 0 %}

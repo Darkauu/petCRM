@@ -139,3 +139,49 @@ def clean_service(form):
         "prices": prices,
         "is_active": 0 if form.get("inactive") else 1,
     }, errors
+
+
+def clean_visit(form, pet_ids, service_ids, today):
+    """Lineas de la visita: 'pick' trae 'idMascota:idServicio' por cada
+    servicio marcado, y price_<mascota>_<servicio> lo que se cobro.
+
+    pet_ids y service_ids acotan lo que se acepta, para que un formulario
+    manipulado no cuelgue la visita de la mascota de otro cliente.
+    """
+    errors = {}
+    visit_date = (form.get("visit_date") or "").strip() or today
+    notes = _text(form, "notes", 1000)
+
+    if not _DATE_RE.match(visit_date):
+        errors["visit_date"] = "Usa el formato AAAA-MM-DD."
+        visit_date = today
+    else:
+        try:
+            if date.fromisoformat(visit_date) > date.fromisoformat(today):
+                errors["visit_date"] = "La visita no puede ser a futuro."
+        except ValueError:
+            errors["visit_date"] = "Fecha inválida."
+
+    lines = []
+    seen = set()
+    for raw in form.getlist("pick"):
+        try:
+            pet_id, service_id = (int(part) for part in raw.split(":", 1))
+        except (ValueError, TypeError):
+            continue
+        if pet_id not in pet_ids or service_id not in service_ids:
+            continue
+        if (pet_id, service_id) in seen:
+            continue
+        seen.add((pet_id, service_id))
+
+        field = f"price_{pet_id}_{service_id}"
+        try:
+            lines.append((pet_id, service_id, parse_money(form.get(field))))
+        except MoneyError as exc:
+            errors[field] = str(exc)
+
+    if not lines and not errors:
+        errors["lines"] = "Marca al menos un servicio."
+
+    return {"visit_date": visit_date, "notes": notes, "lines": lines}, errors

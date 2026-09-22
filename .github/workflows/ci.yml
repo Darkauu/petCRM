@@ -1,0 +1,35 @@
+# CI minimo. No pretende cubrirlo todo: pretende avisar cuando un cambio
+# rompe el alta de clientes, el catalogo o el registro de visitas, en vez
+# de que eso se descubra con el cliente enfrente.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  smoke:
+    name: Prueba de humo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Compilar todo el codigo
+        run: python -m compileall -q app scripts wsgi.py
+
+      - name: Las migraciones aplican sobre una base limpia
+        run: |
+          python scripts/init_db.py
+          python scripts/migrate.py --status
+
+      - name: Recorrer los flujos de la aplicacion
+        run: python scripts/smoke.py

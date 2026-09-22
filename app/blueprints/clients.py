@@ -6,7 +6,7 @@ from flask import (Blueprint, flash, redirect, render_template, request,
 
 from app.database import get_db
 from app.forms import clean_client
-from app.repos import clients, pets
+from app.repos import clients, pets, visits
 
 bp = Blueprint("clients", __name__, url_prefix="/clientes")
 
@@ -25,7 +25,10 @@ def detail(client_id):
     if client is None:
         return render_template("errors/404.html"), 404
     return render_template(
-        "clients/detail.html", client=client, pets=pets.list_for_client(client_id)
+        "clients/detail.html",
+        client=client,
+        pets=pets.list_for_client(client_id),
+        visits=visits.list_for_client(client_id),
     )
 
 

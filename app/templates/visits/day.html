@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Visitas{% endblock %}
+{% block heading %}{{ 'Hoy' if is_today else day }}{% endblock %}
+
+{% block content %}
+  <nav class="daynav">
+    <a class="btn btn-sm btn-ghost"
+       href="{{ url_for('visits.index', dia=prev_day) }}">◀</a>
+    {% if not is_today %}
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('visits.index') }}">Hoy</a>
+    {% else %}
+      <span class="daynav-label">{{ day }}</span>
+    {% endif %}
+    <a class="btn btn-sm btn-ghost"
+       href="{{ url_for('visits.index', dia=next_day) }}">▶</a>
+  </nav>
+
+  <div class="tiles">
+    <div class="tile tile-flat">
+      <span class="tile-n">{{ count }}</span>
+      <span class="tile-l">{{ 'visita' if count == 1 else 'visitas' }}</span>
+    </div>
+    <div class="tile tile-flat">
+      <span class="tile-n">{{ total_cents | money }}</span>
+      <span class="tile-l">cobrado</span>
+    </div>
+  </div>
+
+  {% if rows %}
+    <ul class="list">
+      {% for row in rows %}
+        <li>
+          <a href="{{ url_for('visits.edit', visit_id=row.id) }}">
+            <span class="list-title">
+              {{ row.client_name }}
+              <span class="amount">{{ row.total_cents | money }}</span>
+            </span>
+            <span class="list-sub">{{ row.pet_names or 'sin servicios' }}</span>
+            {% if row.notes %}<span class="list-sub">{{ row.notes }}</span>{% endif %}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty">
+      <p>{{ 'Todavía no has registrado visitas hoy.' if is_today
+            else 'No hay visitas registradas ese día.' }}</p>
+    </div>
+  {% endif %}
+
+  <a class="fab" href="{{ url_for('visits.pick_client') }}"
+     aria-label="Registrar visita">+</a>
+{% endblock %}
