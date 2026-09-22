@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Entrar{% endblock %}
+{% block heading %}{{ biz_name or 'Entrar' }}{% endblock %}
+
+{% block content %}
+<form method="post" class="form" novalidate action="{{ url_for('auth.login') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  {% if error %}<p class="flash flash-bad">{{ error }}</p>{% endif %}
+
+  <label class="field">
+    <span>Correo</span>
+    <input name="email" type="email" inputmode="email" autocapitalize="off"
+           autocomplete="username" value="{{ email }}" required autofocus>
+  </label>
+
+  <label class="field">
+    <span>Contraseña</span>
+    <input name="password" type="password" autocomplete="current-password"
+           required>
+  </label>
+
+  <button class="btn btn-big" type="submit">Entrar</button>
+</form>
+{% endblock %}
+
+{% block nav %}{% endblock %}

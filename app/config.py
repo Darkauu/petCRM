@@ -17,6 +17,12 @@ class Config:
     # antes. Se apaga con AUTO_MIGRATE=0 para migrar a mano.
     AUTO_MIGRATE = os.environ.get("AUTO_MIGRATE", "1") != "0"
 
+    # Un respaldo al dia, sin que nadie tenga que acordarse.
+    AUTO_BACKUP = os.environ.get("AUTO_BACKUP", "1") != "0"
+    BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "14"))
+
+    LOG_DIR = str(BASE_DIR / "data" / "registro")
+
     TIMEZONE = "America/Panama"
 
     # Sesion
