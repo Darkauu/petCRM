@@ -29,6 +29,7 @@
   {% block content %}{% endblock %}
 </main>
 
+{% block nav %}
 <nav class="tabbar">
   <a href="{{ url_for('main.home') }}"
      class="{{ 'on' if request.endpoint == 'main.home' }}">Inicio</a>
@@ -41,6 +42,7 @@
   <a href="{{ url_for('services.index') }}"
      class="{{ 'on' if request.blueprint == 'services' }}">Servicios</a>
 </nav>
+{% endblock %}
 
 {# Confirmacion propia de la aplicacion, no la del navegador: se ve
    igual en cualquier navegador y se muda tal cual a una app nativa. #}

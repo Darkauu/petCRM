@@ -39,4 +39,16 @@
 
   <button class="btn btn-big" type="submit">Guardar</button>
 </form>
+
+<div class="stack stack-top">
+  <p class="hint">
+    {% if current_user.is_authenticated %}
+      Entraste como {{ current_user.display_name }}.
+    {% endif %}
+  </p>
+  <form method="post" action="{{ url_for('auth.logout') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-big" type="submit">Cerrar sesión</button>
+  </form>
+</div>
 {% endblock %}

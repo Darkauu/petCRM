@@ -32,6 +32,8 @@ from scripts.migrate import apply_all         # noqa: E402
 
 FAILURES = []
 PORT = 5099
+EMAIL = "duenio@ejemplo.com"
+PASSWORD = "clave-de-prueba"
 
 
 def check(label, condition, detail=""):
@@ -54,6 +56,10 @@ def seeded_app():
 
     app = create_app(Cfg)
     client = app.test_client()
+    client.post("/crear-cuenta", data={
+        "display_name": "Duenio", "email": EMAIL,
+        "password": PASSWORD, "password2": PASSWORD,
+    })
     client.post("/clientes/nuevo", data={"name": "Marta Rios", "phone": "61234567"})
     client.post("/clientes/1/mascotas/nueva", data={"name": "Toby", "size": "small"})
     client.post("/clientes/1/mascotas/nueva", data={"name": "Luna", "size": "large"})
@@ -70,6 +76,15 @@ def run(page, url):
     # Si el navegador llegara a abrir SU dialogo, cae aqui.
     native = []
     page.on("dialog", lambda d: (native.append(d.type), d.dismiss()))
+
+    print("\nEntrar")
+    page.goto(f"{url}/clientes/")
+    check("sin sesion no se ve nada", "/entrar" in page.url, page.url)
+    page.fill("input[name=email]", EMAIL)
+    page.fill("input[name=password]", PASSWORD)
+    page.click("button[type=submit]")
+    page.wait_for_url(lambda u: "/entrar" not in u, timeout=5000)
+    check("con la cuenta correcta se entra", "/entrar" not in page.url, page.url)
 
     print("\nBuscador con resultados mientras se escribe")
     page.goto(f"{url}/visitas/nueva")

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Crear la cuenta{% endblock %}
+{% block heading %}Crear tu cuenta{% endblock %}
+
+{% block content %}
+<p class="hint">
+  Es la primera vez que se abre el sistema. Esta cuenta será la tuya; esta
+  pantalla no vuelve a aparecer.
+</p>
+
+<form method="post" class="form" novalidate action="{{ url_for('auth.setup') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label class="field">
+    <span>Tu nombre</span>
+    <input name="display_name" autocapitalize="words" autofocus>
+  </label>
+
+  <label class="field {{ 'bad' if errors.email }}">
+    <span>Correo</span>
+    <input name="email" type="email" inputmode="email" autocapitalize="off"
+           autocomplete="username" value="{{ email }}" required>
+    {% if errors.email %}<em>{{ errors.email }}</em>{% endif %}
+  </label>
+
+  <label class="field {{ 'bad' if errors.password }}">
+    <span>Contraseña</span>
+    <input name="password" type="password" autocomplete="new-password" required>
+    {% if errors.password %}<em>{{ errors.password }}</em>{% endif %}
+  </label>
+
+  <label class="field {{ 'bad' if errors.password2 }}">
+    <span>Repite la contraseña</span>
+    <input name="password2" type="password" autocomplete="new-password" required>
+    {% if errors.password2 %}<em>{{ errors.password2 }}</em>{% endif %}
+  </label>
+
+  <button class="btn btn-big" type="submit">Crear cuenta</button>
+</form>
+{% endblock %}
+
+{% block nav %}{% endblock %}

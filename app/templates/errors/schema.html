@@ -3,6 +3,17 @@
 {% block heading %}Falta un paso{% endblock %}
 
 {% block content %}
+  {% if error %}
+    <div class="gap">
+      <strong>No se pudo actualizar la base sola.</strong>
+      <p>{{ error }}</p>
+      <p class="gap-note">
+        Tus datos quedaron como estaban. Guarda este mensaje: dice qué
+        falló y dónde quedó el respaldo.
+      </p>
+    </div>
+  {% endif %}
+
   <div class="gap">
     {% if empty %}
       <strong>La base de datos todavía no está creada.</strong>
@@ -27,7 +38,10 @@
     <p>Para crearla, desde la carpeta del proyecto:</p>
     <pre class="cmd">python scripts/init_db.py</pre>
   {% elif missing > 0 %}
-    <p>Para ponerla al día, desde la carpeta del proyecto:</p>
+    <p>
+      {{ 'Puedes intentarlo a mano, desde la carpeta del proyecto:'
+         if error else 'Para ponerla al día, desde la carpeta del proyecto:' }}
+    </p>
     <pre class="cmd">python scripts/migrate.py</pre>
     <p class="hint">
       Tus clientes, mascotas y visitas no se tocan: solo se agrega lo que

@@ -9,7 +9,10 @@ Uso:
 """
 import contextlib
 import io
+import logging
 import os
+import pathlib
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -23,6 +26,15 @@ from app.config import DevelopmentConfig       # noqa: E402
 from scripts.migrate import apply_all          # noqa: E402
 
 FAILURES = []
+
+
+def sign_in(client):
+    """Crea la cuenta del duenio y deja la sesion abierta."""
+    client.post("/crear-cuenta", data={
+        "display_name": "Duenio", "email": "duenio@ejemplo.com",
+        "password": "clave-de-prueba", "password2": "clave-de-prueba",
+    })
+    return client
 
 
 def check(label, condition, detail=""):
@@ -47,9 +59,10 @@ def run_flow(db_path):
         DB_PATH = db_path
         TESTING = True
         WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
 
     app = create_app(Cfg)
-    client = app.test_client()
+    client = sign_in(app.test_client())
 
     print("\nClientes y mascotas")
     r = client.get("/")
@@ -270,8 +283,9 @@ def run_interface(db_path):
         DB_PATH = db_path
         TESTING = True
         WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
 
-    client = create_app(Cfg).test_client()
+    client = sign_in(create_app(Cfg).test_client())
     client.post("/clientes/nuevo", data={"name": "Marta Rios", "phone": "61234567"})
     client.post("/clientes/1/mascotas/nueva", data={"name": "Toby", "size": "small"})
     client.post("/clientes/nuevo", data={"name": "Beto Lima", "phone": "60099887"})
@@ -331,6 +345,307 @@ def run_interface(db_path):
               'innerHTML = ""', ""))
 
 
+def run_auth(db_path):
+    """Control de acceso: nada alcanzable sin sesion."""
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db_path
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+        AUTO_BACKUP = False
+
+    client = create_app(Cfg).test_client()
+
+    print("\nSin ninguna cuenta creada")
+    for url in ("/", "/clientes/", "/resumen/", "/visitas/nueva", "/ajustes/"):
+        r = client.get(url)
+        if r.status_code != 302 or "/crear-cuenta" not in r.headers["Location"]:
+            check(f"{url} lleva a crear la cuenta", False,
+                  f"{r.status_code} {r.headers.get('Location')}")
+            break
+    else:
+        check("ninguna pantalla se abre; todas llevan a crear la cuenta", True)
+    check("health sigue publico, para poder vigilar desde afuera",
+          client.get("/health").status_code == 200)
+
+    print("\nCrear la cuenta del duenio")
+    r = client.post("/crear-cuenta", data={
+        "display_name": "Alejandro", "email": "duenio@ejemplo.com",
+        "password": "corta", "password2": "corta"})
+    check("una contrasenia corta se rechaza",
+          r.status_code == 400 and "al menos 8" in r.get_data(as_text=True))
+    r = client.post("/crear-cuenta", data={
+        "display_name": "Alejandro", "email": "duenio@ejemplo.com",
+        "password": "clave-de-prueba", "password2": "otra-distinta"})
+    check("dos contrasenias distintas se rechazan",
+          r.status_code == 400 and "no coinciden" in r.get_data(as_text=True))
+
+    r = client.post("/crear-cuenta", data={
+        "display_name": "Alejandro", "email": "duenio@ejemplo.com",
+        "password": "clave-de-prueba", "password2": "clave-de-prueba"})
+    check("cuenta creada y sesion abierta de una",
+          r.status_code == 302 and client.get("/").status_code == 200)
+    check("la pantalla de crear cuenta ya no existe",
+          client.get("/crear-cuenta").headers.get("Location", "").endswith("/entrar"))
+
+    with create_app(Cfg).app_context():
+        from app.repos import users
+        row = users.get_by_email("duenio@ejemplo.com")
+        check("la contrasenia no se guarda en claro",
+              "clave-de-prueba" not in row["password_hash"])
+
+    print("\nSalir y volver a entrar")
+    check("salir cierra la sesion", client.post("/salir").status_code == 302)
+    r = client.get("/clientes/")
+    check("y las pantallas vuelven a pedir sesion",
+          r.status_code == 302 and "/entrar" in r.headers["Location"])
+
+    r = client.post("/entrar", data={"email": "duenio@ejemplo.com",
+                                     "password": "equivocada"})
+    mal_clave = r.get_data(as_text=True)
+    check("contrasenia equivocada no entra", r.status_code == 401)
+    r = client.post("/entrar", data={"email": "nadie@ejemplo.com",
+                                     "password": "loquesea"})
+    check("un correo que no existe da el MISMO mensaje: no se revela cual fallo",
+          "Correo o contrase" in mal_clave and "Correo o contrase" in r.get_data(as_text=True))
+
+    r = client.post("/entrar", data={"email": "duenio@ejemplo.com",
+                                     "password": "clave-de-prueba"})
+    check("con la contrasenia correcta si entra",
+          r.status_code == 302 and client.get("/").status_code == 200)
+
+    print("\nFreno a los intentos repetidos")
+    client.post("/salir")
+    for _ in range(8):
+        client.post("/entrar", data={"email": "duenio@ejemplo.com",
+                                     "password": "probando"})
+    r = client.post("/entrar", data={"email": "duenio@ejemplo.com",
+                                     "password": "probando"})
+    check("tras 8 fallos se frena", r.status_code == 429)
+    check("y lo dice sin revelar nada mas",
+          "Demasiados intentos" in r.get_data(as_text=True))
+    r = client.post("/entrar", data={"email": "duenio@ejemplo.com",
+                                     "password": "clave-de-prueba"})
+    check("el freno tambien aplica a la contrasenia correcta",
+          r.status_code == 429)
+
+    print("\nCabeceras")
+    headers = client.get("/entrar").headers
+    check("se declara de donde puede venir el contenido",
+          "default-src 'self'" in headers.get("Content-Security-Policy", ""))
+    check("no se adivina el tipo de archivo",
+          headers.get("X-Content-Type-Options") == "nosniff")
+    check("no se puede meter en un iframe ajeno",
+          headers.get("X-Frame-Options") == "DENY")
+
+
+def run_backups(_unused):
+    """Respaldos que no dependen de que alguien se acuerde."""
+    from datetime import datetime, timedelta
+
+    work = tempfile.mkdtemp()
+    db = os.path.join(work, "petcrm.db")
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        (BASE_DIR / "migrations" / "001_initial.sql").read_text(encoding="utf-8"))
+    conn.execute("INSERT INTO client (name, phone) VALUES ('Marta','+50761234567')")
+    conn.commit()
+    conn.close()
+
+    from app import backups
+
+    print("\nRespaldo diario")
+    first = backups.ensure_daily(db)
+    check("se crea el del dia", first["action"] == "created", first)
+    check("y queda junto a la base, en respaldos/",
+          os.path.isdir(os.path.join(work, "respaldos")))
+
+    again = backups.ensure_daily(db)
+    check("llamarlo otra vez el mismo dia no duplica",
+          again["action"] == "ok" and
+          len(os.listdir(os.path.join(work, "respaldos"))) == 1)
+
+    copia = sqlite3.connect(first["backup"])
+    check("el respaldo es una base de verdad, con los datos dentro",
+          copia.execute("SELECT name FROM client").fetchone()[0] == "Marta")
+    copia.close()
+
+    print("\nLimpieza por antiguedad")
+    folder = pathlib.Path(work) / "respaldos"
+    # Respaldos viejos, y uno previo a una migracion que NO debe borrarse.
+    for days in range(1, 25):
+        day = datetime.now() - timedelta(days=days)
+        (folder / backups.daily_name(db, day)).write_bytes(b"x")
+    (folder / "petcrm-v2-20260101-000000.db").write_bytes(b"x")
+
+    removed = backups.prune(db, keep=14)
+    quedan = sorted(p.name for p in folder.glob("*.db"))
+    diarios = [n for n in quedan if "-diario-" in n]
+    check("deja los 14 mas recientes", len(diarios) == 14, diarios)
+    check("borra el resto", len(removed) == 11, len(removed))
+    check("y NO toca el respaldo previo a una migracion",
+          "petcrm-v2-20260101-000000.db" in quedan)
+
+    print("\nRespaldo forzado a mano")
+    import subprocess
+    r = subprocess.run(
+        [sys.executable, str(BASE_DIR / "scripts" / "backup.py"),
+         "--db", db, "--forzar"],
+        capture_output=True, text=True)
+    check("scripts/backup.py --forzar crea uno aparte",
+          r.returncode == 0 and any("-manual-" in n for n in os.listdir(folder)),
+          r.stdout + r.stderr)
+
+    print("\nProduccion")
+    from app.config import ProductionConfig
+    import os as _os
+    guardado = _os.environ.get("SECRET_KEY")
+    try:
+        from app import config as config_module
+        config_module.Config.SECRET_KEY = None
+        try:
+            ProductionConfig()
+            check("sin SECRET_KEY no arranca en produccion", False,
+                  "arranco igual")
+        except RuntimeError:
+            check("sin SECRET_KEY no arranca en produccion: "
+                  "no se despliega inseguro por descuido", True)
+
+        config_module.Config.SECRET_KEY = "x" * 40
+        cfg = ProductionConfig()
+        check("en produccion la cookie de sesion va solo por HTTPS",
+              cfg.SESSION_COOKIE_SECURE is True)
+        check("y no es alcanzable desde JavaScript",
+              cfg.SESSION_COOKIE_HTTPONLY is True)
+    finally:
+        config_module.Config.SECRET_KEY = guardado
+
+    logs = tempfile.mkdtemp()
+
+    class Prod(DevelopmentConfig):
+        DB_PATH = db
+        DEBUG = False           # ni debug ni testing: se escribe el registro
+        TESTING = False
+        LOG_DIR = logs
+        AUTO_BACKUP = False
+        SECRET_KEY = "x" * 40
+
+    app = create_app(Prod)
+    app.logger.error("prueba de registro")
+    escrito = pathlib.Path(logs, "app.log").read_text(encoding="utf-8")
+    check("fuera de desarrollo, lo que falla queda escrito en un archivo",
+          "prueba de registro" in escrito, escrito[:200])
+    check("con fecha y lugar, para poder mandarlo",
+          "ERROR" in escrito and ".py:" in escrito)
+    shutil.rmtree(logs, ignore_errors=True)
+
+    shutil.rmtree(work, ignore_errors=True)
+
+
+def run_auto_migrate(_unused):
+    """La base se pone al dia sola al arrancar, y respaldada."""
+    work = tempfile.mkdtemp()
+    db = os.path.join(work, "petcrm.db")
+
+    conn = sqlite3.connect(db)
+    conn.execute("PRAGMA journal_mode = WAL")
+    for name in ("001_initial.sql", "002_resumen.sql"):
+        conn.executescript(
+            (BASE_DIR / "migrations" / name).read_text(encoding="utf-8"))
+    conn.execute("INSERT INTO client (name, phone) VALUES ('Marta','+50761234567')")
+    conn.execute("INSERT INTO pet (client_id, name, size) VALUES (1,'Toby','small')")
+    conn.execute("INSERT INTO service (name) VALUES ('Bano')")
+    conn.execute("INSERT INTO service_price (service_id, size, price_cents) "
+                 "VALUES (1,'any',2000)")
+    conn.execute("INSERT INTO visit (client_id, visit_date) VALUES (1,'2026-08-01')")
+    conn.execute("INSERT INTO visit_service (visit_id, pet_id, service_id, price_cents) "
+                 "VALUES (1,1,1,2000)")
+    conn.commit()
+    conn.close()
+
+    print("\nLa base se migra sola al arrancar")
+
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False     # aqui solo interesa el respaldo de migracion
+
+    logging.disable(logging.CRITICAL)
+    app = create_app(Cfg)
+    logging.disable(logging.NOTSET)
+    client = sign_in(app.test_client())
+
+    conn = sqlite3.connect(db)
+    check("la version sube sola", conn.execute("PRAGMA user_version").fetchone()[0] == 3)
+    check("el cliente sigue ahi",
+          conn.execute("SELECT name FROM client").fetchone()[0] == "Marta")
+    check("la visita historica se conserva con su estado",
+          conn.execute("SELECT status FROM visit").fetchone()[0] == "completed")
+    check("y su linea de cobro",
+          conn.execute("SELECT price_cents FROM visit_service").fetchone()[0] == 2000)
+    conn.close()
+
+    respaldos = os.listdir(os.path.join(work, "respaldos"))
+    check("se respaldo antes de tocar nada", len(respaldos) == 1, respaldos)
+    check("el respaldo dice de que version venia", "-v2-" in respaldos[0])
+
+    r = client.post("/visitas/nueva/1", data={"pick": ["1:1"], "price_1_1": "20"})
+    check("registrar una visita ya funciona, sin correr ningun comando",
+          r.status_code == 302, r.get_data(as_text=True)[:200])
+    check("health responde ok", client.get("/health").get_json()["status"] == "ok")
+
+    print("\nUna migracion que falla no deja la base a medias")
+    migs = tempfile.mkdtemp()
+    for name in ("001_initial.sql", "002_resumen.sql", "003_cobro.sql"):
+        shutil.copy(BASE_DIR / "migrations" / name, migs)
+    # Crea algo y despues se rompe: sin rollback quedaria la tabla suelta.
+    with open(os.path.join(migs, "004_rota.sql"), "w") as handle:
+        handle.write("CREATE TABLE prueba (id INTEGER);\n"
+                     "INSERT INTO tabla_que_no_existe (x) VALUES (1);\n"
+                     "PRAGMA user_version = 4;\n")
+
+    work2 = tempfile.mkdtemp()
+    db2 = os.path.join(work2, "petcrm.db")
+    conn = sqlite3.connect(db2)
+    for name in ("001_initial.sql", "002_resumen.sql"):
+        conn.executescript(
+            (BASE_DIR / "migrations" / name).read_text(encoding="utf-8"))
+    conn.execute("INSERT INTO client (name, phone) VALUES ('Marta','+50761234567')")
+    conn.commit()
+    conn.close()
+
+    class Broken(DevelopmentConfig):
+        DB_PATH = db2
+        MIGRATIONS_DIR = migs
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    logging.disable(logging.CRITICAL)
+    app = create_app(Broken)
+    logging.disable(logging.NOTSET)
+
+    conn = sqlite3.connect(db2)
+    check("la base vuelve a la version que tenia",
+          conn.execute("PRAGMA user_version").fetchone()[0] == 2)
+    check("los datos siguen intactos",
+          conn.execute("SELECT name FROM client").fetchone()[0] == "Marta")
+    check("no queda nada a medio crear",
+          conn.execute("SELECT COUNT(*) FROM sqlite_master "
+                       "WHERE name='prueba'").fetchone()[0] == 0)
+    conn.close()
+
+    body = app.test_client().get("/").get_data(as_text=True)
+    check("la pantalla explica que no se pudo",
+          "No se pudo actualizar la base sola" in body)
+    check("nombra la migracion que fallo", "004_rota.sql" in body)
+    check("y dice que los datos quedaron como estaban", "como estaban" in body)
+
+    for folder in (work, work2, migs):
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 def run_schema_guard(_unused):
     """Codigo y base desalineados: tiene que verse, no reventar.
 
@@ -341,6 +656,8 @@ def run_schema_guard(_unused):
             DB_PATH = path
             TESTING = True
             WTF_CSRF_ENABLED = False
+            AUTO_MIGRATE = False        # se prueba la guardia, no el arreglo
+            AUTO_BACKUP = False
         return create_app(Cfg).test_client()
 
     print("\nBase sin crear")
@@ -385,8 +702,14 @@ def run_schema_guard(_unused):
     print("\nSe arregla sola al migrar")
     with contextlib.redirect_stdout(io.StringIO()):
         apply_all(old, str(BASE_DIR / "migrations"))
-    check("la misma sesion vuelve a entrar sin reiniciar",
-          client.get("/visitas/nueva").status_code == 200)
+    # Ya no es 503: ahora lo unico que falta es entrar, que es el
+    # siguiente paso correcto en una base recien puesta al dia.
+    r = client.get("/visitas/nueva")
+    check("deja de bloquear sin reiniciar el servidor",
+          r.status_code != 503, r.status_code)
+    check("y lo que pide ahora es crear la cuenta",
+          r.status_code == 302 and "/crear-cuenta" in r.headers["Location"],
+          r.headers.get("Location"))
     check("y health vuelve a ok", client.get("/health").get_json()["status"] == "ok")
 
     print("\nBase mas nueva que el codigo")
@@ -411,7 +734,11 @@ def run_csrf(db_path):
     class Cfg(DevelopmentConfig):
         DB_PATH = db_path
         TESTING = True          # CSRF activo a proposito
+        AUTO_BACKUP = False
 
+    # No se abre sesion: el CSRF se revisa antes que el control de acceso,
+    # que es el orden correcto. Un POST forjado se rechaza de entrada, sin
+    # llegar siquiera a mirar quien lo manda.
     client = create_app(Cfg).test_client()
     r = client.post("/clientes/nuevo", data={"name": "X", "phone": "61234567"})
     check("un POST sin token se rechaza con una pagina entendible",
@@ -424,9 +751,10 @@ def run_stats(db_path):
         DB_PATH = db_path
         TESTING = True
         WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
 
     app = create_app(Cfg)
-    client = app.test_client()
+    client = sign_in(app.test_client())
 
     with app.app_context():
         from app.clock import today, week_bounds
@@ -615,7 +943,8 @@ def shift_of(app, iso, days):
 
 if __name__ == "__main__":
     for runner in (run_flow, run_csrf, run_stats, run_interface,
-                   run_schema_guard):
+                   run_schema_guard, run_auto_migrate, run_auth,
+                   run_backups):
         path = fresh_db()
         try:
             runner(path)
