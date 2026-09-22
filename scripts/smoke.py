@@ -331,6 +331,80 @@ def run_interface(db_path):
               'innerHTML = ""', ""))
 
 
+def run_schema_guard(_unused):
+    """Codigo y base desalineados: tiene que verse, no reventar.
+
+    Arma sus propias bases a proposito, cada una en una version distinta.
+    """
+    def app_on(path):
+        class Cfg(DevelopmentConfig):
+            DB_PATH = path
+            TESTING = True
+            WTF_CSRF_ENABLED = False
+        return create_app(Cfg).test_client()
+
+    print("\nBase sin crear")
+    empty = tempfile.mktemp(suffix=".db")
+    sqlite3.connect(empty).close()
+    client = app_on(empty)
+    body = client.get("/").get_data(as_text=True)
+    check("no deja entrar", client.get("/").status_code == 503)
+    check("dice que la base no esta creada", "no est\u00e1 creada" in body)
+    check("y da el comando exacto", "scripts/init_db.py" in body)
+
+    print("\nBase atrasada respecto al codigo")
+    old = tempfile.mktemp(suffix=".db")
+    conn = sqlite3.connect(old)
+    for name in ("001_initial.sql", "002_resumen.sql"):
+        conn.executescript(
+            (BASE_DIR / "migrations" / name).read_text(encoding="utf-8"))
+    conn.commit()
+    conn.close()
+
+    client = app_on(old)
+    r = client.get("/visitas/nueva")
+    body = r.get_data(as_text=True)
+    check("corta el paso con 503", r.status_code == 503)
+    check("dice que la base esta desactualizada", "desactualizada" in body)
+    check("nombra las dos versiones", "3" in body and "2" in body)
+    check("da el comando exacto", "scripts/migrate.py" in body)
+    check("y promete que los datos no se tocan", "no se tocan" in body)
+
+    # Lo que antes reventaba con sqlite3.IntegrityError a media faena.
+    r = client.post("/visitas/nueva/1", data={"pick": ["1:1"], "price_1_1": "20"})
+    check("registrar una visita ya no revienta con un error de SQLite",
+          r.status_code == 503)
+
+    r = client.get("/health")
+    check("health avisa del desajuste en vez de decir ok",
+          r.status_code == 503 and r.get_json()["status"] == "schema_mismatch",
+          r.get_json())
+    check("los estilos siguen sirviendose, para que el aviso se lea",
+          client.get("/static/css/app.css").status_code == 200)
+
+    print("\nSe arregla sola al migrar")
+    with contextlib.redirect_stdout(io.StringIO()):
+        apply_all(old, str(BASE_DIR / "migrations"))
+    check("la misma sesion vuelve a entrar sin reiniciar",
+          client.get("/visitas/nueva").status_code == 200)
+    check("y health vuelve a ok", client.get("/health").get_json()["status"] == "ok")
+
+    print("\nBase mas nueva que el codigo")
+    future = fresh_db()
+    conn = sqlite3.connect(future)
+    conn.execute("PRAGMA user_version = 99")
+    conn.commit()
+    conn.close()
+    body = app_on(future).get("/").get_data(as_text=True)
+    check("tambien corta el paso", "m\u00e1s nueva que el programa" in body)
+    check("y ahi el comando es actualizar el programa", "git pull" in body)
+
+    for path in (empty, old, future):
+        for suffix in ("", "-wal", "-shm"):
+            if os.path.exists(path + suffix):
+                os.unlink(path + suffix)
+
+
 def run_csrf(db_path):
     print("\nProteccion CSRF")
 
@@ -540,7 +614,8 @@ def shift_of(app, iso, days):
 
 
 if __name__ == "__main__":
-    for runner in (run_flow, run_csrf, run_stats, run_interface):
+    for runner in (run_flow, run_csrf, run_stats, run_interface,
+                   run_schema_guard):
         path = fresh_db()
         try:
             runner(path)
