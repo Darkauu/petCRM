@@ -69,6 +69,24 @@ def seeded_app():
                 data={"name": "Bano", "price_mode": "any", "price_any": "20"})
     client.post("/visitas/nueva/1",
                 data={"pick": ["1:1"], "price_1_1": "20", "charge": "1"})
+
+    # Alguien atrasado, para poder ver el boton de WhatsApp en la lista.
+    with app.app_context():
+        from app.clock import shift, today
+        from app.database import get_db
+        from app.repos import clients, pets, visits
+        cira = clients.create({
+            "name": "Cira Paz", "phone": "+50760055566",
+            "phone_display": "6005-5566", "document": None, "email": None,
+            "address": None, "notes": None})
+        nina = pets.create({
+            "client_id": cira, "name": "Nina", "species": "dog",
+            "breed": None, "size": "large", "sex": None, "birthdate": None,
+            "weight_kg": None, "temperament": None, "medical_notes": None,
+            "is_active": 1})
+        visits.create(cira, shift(today(), -40), None,
+                      [(nina, 1, 2000)], status="completed")
+        get_db().commit()
     return app
 
 
@@ -133,6 +151,31 @@ def run(page, url):
     page.wait_for_url("**/clientes/2", timeout=5000)
     check("pero aqui lleva a la ficha, no a registrar visita",
           page.url.rstrip("/").endswith("/clientes/2"), page.url)
+
+    print("\nLa fila del cliente no se aprieta")
+    page.goto(f"{url}/clientes/")
+    caja = page.evaluate("""() => {
+      const li = [...document.querySelectorAll('.list li')]
+        .find(e => e.querySelector('.btn-wa'));
+      if (!li) return null;
+      const btn = li.querySelector('.btn-wa');
+      const cs = getComputedStyle(btn);
+      const b = btn.getBoundingClientRect();
+      return {alto: Math.round(b.height), ancho: Math.round(b.width),
+              desborda: btn.scrollWidth > btn.offsetWidth + 1,
+              direccion: cs.flexDirection,
+              lineas: Math.round(b.height / parseFloat(cs.lineHeight || 20))};
+    }""")
+    check("hay una fila con boton de WhatsApp", caja is not None, caja)
+    if caja:
+        # El boton es un <a> hermano dentro del <li>: sin excluirlo del
+        # selector del enlace se llevaba flex-direction: column y perdia
+        # el relleno, con la etiqueta saliendose de la caja.
+        check("el boton pone icono y texto en la misma linea",
+              caja["direccion"] == "row", caja)
+        check("y la etiqueta no se sale de su caja",
+              not caja["desborda"], caja)
+        check("sigue siendo tocable con el pulgar", caja["alto"] >= 44, caja)
 
     print("\nDia y noche")
     page.goto(f"{url}/resumen/")

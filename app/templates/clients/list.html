@@ -23,24 +23,62 @@
         role="listbox" data-results hidden></ul>
   </div>
 
+  {# Cada pestaña es una pregunta que el dueño se hace de verdad, y trae
+     su número al lado: sirve tanto para filtrar como para saber cuántos
+     son sin tener que contarlos. #}
+  <nav class="chips" aria-label="Filtrar clientes">
+    {% for g in grupos %}
+      <a class="chip-link {{ 'on' if elegido == g.key }}"
+         href="{{ url_for('clients.index', f=g.key or none, q=term or none) }}">
+        {{ g.label }} <span class="chip-n">{{ g.count }}</span>
+      </a>
+    {% endfor %}
+  </nav>
+
   {% if rows %}
     <ul class="list">
       {% for row in rows %}
-        <li>
+        {% set atrasado = row.last_visit_date is not none and row.days > plazo %}
+        <li class="{{ 'is-late' if atrasado }}">
           <a href="{{ url_for('clients.detail', client_id=row.id) }}">
             <span class="list-title">{{ row.name }}</span>
             <span class="list-sub">
-              {{ row.phone_display or (row.phone | phone) }}
-              {%- if row.pet_names %} · {{ row.pet_names }}{% endif %}
+              {{ row.pet_names or 'sin mascotas' }}
+              · {{ row.phone_display or (row.phone | phone) }}
             </span>
+            {% if row.last_visit_date is none %}
+              <span class="visit visit-none">Sin visitas registradas</span>
+            {% elif atrasado %}
+              <span class="visit visit-late">
+                Hace {{ row.days }} días · {{ row.last_visit_date | fecha }}
+              </span>
+            {% else %}
+              <span class="visit">
+                Hace {{ row.days }} días · {{ row.last_visit_date | fecha }}
+              </span>
+            {% endif %}
           </a>
+
+          {# El botón vive aquí, en la lista: el punto es verlo sin tener
+             que entrar a cada ficha. #}
+          {% if atrasado %}
+            <a class="btn btn-sm btn-wa" href="https://wa.me/{{ row.phone[1:] }}"
+               target="_blank" rel="noopener">
+              {{ icon('whatsapp', 16) }} Escribirle</a>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>
+
   {% elif term %}
     <div class="empty">
       <p>Nadie coincide con «{{ term }}».</p>
       <a class="btn" href="{{ url_for('clients.create') }}">Registrarlo como nuevo</a>
+    </div>
+  {% elif elegido %}
+    <div class="empty">
+      <p>Ningún cliente cae en ese grupo.</p>
+      <a class="btn btn-ghost" href="{{ url_for('clients.index') }}">Ver todos</a>
     </div>
   {% else %}
     <div class="empty">
