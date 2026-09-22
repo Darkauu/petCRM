@@ -364,3 +364,30 @@ body {
 
 /* Con cinco pestanias las etiquetas se aprietan en pantallas chicas. */
 .tabbar a { font-size: .8125rem; padding: .875rem .25rem; }
+
+/* ---- Pendiente de cobro ---------------------------------------------
+   Lo pendiente se ve distinto de lo cobrado: si se confunden, se
+   olvida, que es justo el problema que esto resuelve. */
+
+.list li.is-pending {
+  border-color: var(--warn);
+  border-left-width: 4px;
+}
+.row-action { flex-shrink: 0; margin: .5rem 0; }
+
+.tile-warn { border-color: var(--warn); }
+.tile-warn .tile-n { color: var(--warn); }
+
+.callout-warn { border-color: var(--warn); }
+.callout-warn strong, .callout-warn span { color: var(--warn); }
+
+.status {
+  display: inline-block; margin: 0 0 1rem;
+  padding: .375rem .75rem; border-radius: 999px;
+  font-size: .8125rem; font-weight: 600;
+  background: var(--border); color: var(--muted);
+}
+.status-pending { background: var(--warn-bg); color: var(--warn); }
+.status-completed { background: var(--ok-bg); color: var(--ok); }
+
+.stack-top { margin-top: 2rem; }

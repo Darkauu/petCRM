@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "visits/_row.html" import visit_row %}
+{% block title %}Pendientes de cobro{% endblock %}
+{% block heading %}Pendientes de cobro{% endblock %}
+{% block back %}<a class="back" href="{{ url_for('main.home') }}">Volver</a>{% endblock %}
+
+{% block content %}
+  {% if rows %}
+    <p class="hint">
+      Mascotas recibidas que todavía no se han cobrado, de la más vieja a
+      la más nueva. Si alguien se llevó la suya sin atender, abre la visita
+      y ciérrala sin cobro.
+    </p>
+    <ul class="list">
+      {% for row in rows %}{{ visit_row(row, 'pending', true) }}{% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty">
+      <p>No queda nada pendiente de cobro.</p>
+      <a class="btn btn-ghost" href="{{ url_for('visits.index') }}">Ver el día</a>
+    </div>
+  {% endif %}
+{% endblock %}

@@ -118,7 +118,7 @@ def run_flow(db_path):
         check("y cae a 'any' cuando no hay precio por talla",
               services.price_for(2, "large") == 500)
 
-    print("\nRegistrar visita")
+    print("\nRecibir la mascota")
     body = client.get("/visitas/nueva").get_data(as_text=True)
     check("el selector avisa cuando no hay visitas previas",
           "Todav" in body and "primera" in body)
@@ -130,14 +130,60 @@ def run_flow(db_path):
           r.get_data(as_text=True)[:300])
 
     body = client.get("/visitas/").get_data(as_text=True)
-    check("el dia suma lo cobrado", "$43.00" in body, body[:400])
-    check("el dia nombra a las dos mascotas",
-          "Toby" in body and "Luna" in body)
+    check("la visita nace pendiente, no cobrada", "por cobrar" in body, body[:400])
+    check("el boton lleva el monto encima", "Cobrar $43.00" in body)
+    check("lo pendiente NO suma en lo cobrado del dia", "$0.00" in body)
+
+    body = client.get("/clientes/1").get_data(as_text=True)
+    check("una visita pendiente no cuenta como ultima visita de la mascota",
+          body.count("Sin visitas registradas") == 2)
 
     body = client.get("/visitas/nueva/1").get_data(as_text=True)
-    check("el precio se precarga con el ultimo cobro, no con el de lista",
-          'value="18.00"' in body)
-    check("y se dice de donde salio", "\u00faltimo cobro" in body)
+    check("y tampoco sirve de referencia de precio: sale el de lista",
+          'value="15.00"' in body and "\u00faltimo cobro" not in body)
+
+    print("\nCobrar al entregar")
+    r = client.post("/visitas/1/cobrar", follow_redirects=True)
+    body = r.get_data(as_text=True)
+    check("el cobro dice cuanto se factur\u00f3", "cobrado $43.00" in body, body[:400])
+    check("ahora si cuenta como cobrado del dia", "$43.00" in body)
+    check("y el boton de cobrar desaparece", "Cobrar $43.00" not in body)
+
+    r = client.post("/visitas/1/cobrar", follow_redirects=True)
+    check("un segundo toque no vuelve a cobrar",
+          "ya no estaba pendiente" in r.get_data(as_text=True))
+
+    r = client.post("/visitas/1/reabrir", follow_redirects=True)
+    check("un cobro hecho por error se puede deshacer",
+          "pendiente de cobro" in r.get_data(as_text=True))
+    r = client.post("/visitas/1/cobrar", follow_redirects=True)
+    check("y volver a cobrarse", "cobrado $43.00" in r.get_data(as_text=True))
+
+    body = client.get("/clientes/1").get_data(as_text=True)
+    check("cobrada, ya cuenta como ultima visita", "Hace 0" in body)
+
+    body = client.get("/visitas/nueva/1").get_data(as_text=True)
+    check("y ya sirve de referencia: sale el ultimo cobro",
+          'value="18.00"' in body and "\u00faltimo cobro" in body)
+
+    print("\nSe la llevaron sin atender")
+    r = client.post("/visitas/nueva/1",
+                    data={"pick": ["1:2"], "price_1_2": "5"})
+    check("segunda visita recibida", r.status_code == 302)
+    body = client.get("/visitas/pendientes").get_data(as_text=True)
+    check("aparece en la lista de pendientes", "Cobrar $5.00" in body)
+
+    r = client.post("/visitas/2/cancelar", data={"from": "pending"},
+                    follow_redirects=True)
+    body = r.get_data(as_text=True)
+    check("cerrarla sin cobro", "cerrada sin cobro" in body)
+    check("la lista de pendientes queda vacia",
+          "No queda nada pendiente" in body)
+
+    body = client.get("/visitas/").get_data(as_text=True)
+    check("queda el registro de que vinieron",
+          "se retir\u00f3 sin atender" in body)
+    check("pero no suma un centavo", "$48.00" not in body)
 
     print("\nEl historico no se reescribe")
     r = client.post("/servicios/1/editar",
@@ -192,12 +238,12 @@ def run_flow(db_path):
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute(
-        "INSERT INTO visit (client_id, visit_date) "
-        "VALUES (1, date('now','-5 hours','-20 days'))"
+        "INSERT INTO visit (client_id, visit_date, status) "
+        "VALUES (1, date('now','-5 hours','-20 days'), 'completed')"
     )
     conn.execute(
         "INSERT INTO visit_service (visit_id, pet_id, service_id, price_cents) "
-        "VALUES (2, 1, 1, 1500)"
+        "VALUES ((SELECT MAX(id) FROM visit), 1, 1, 1500)"
     )
     conn.commit()
     conn.close()
@@ -263,12 +309,12 @@ def run_stats(db_path):
     r = client.post("/visitas/nueva/1",
                     data={"pick": ["1:1", "1:2", "2:1"],
                           "price_1_1": "20", "price_1_2": "70",
-                          "price_2_1": "20"})
-    check("visita de hoy registrada", r.status_code == 302)
+                          "price_2_1": "20", "charge": "1"})
+    check("visita de hoy registrada y cobrada de una", r.status_code == 302)
     r = client.post("/visitas/nueva/2",
                     data={"pick": ["3:1"], "price_3_1": "20",
-                          "visit_date": lunes})
-    check("visita del lunes registrada", r.status_code == 302)
+                          "visit_date": lunes, "charge": "1"})
+    check("visita del lunes registrada y cobrada", r.status_code == 302)
 
     print("\nCifras del periodo")
     body = client.get("/resumen/?p=semana").get_data(as_text=True)
@@ -301,7 +347,8 @@ def run_stats(db_path):
 
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("INSERT INTO visit (client_id, visit_date) VALUES (1, ?)", (base,))
+    conn.execute("INSERT INTO visit (client_id, visit_date, status) "
+                 "VALUES (1, ?, 'completed')", (base,))
     conn.execute(
         "INSERT INTO visit_service (visit_id, pet_id, service_id, price_cents) "
         "VALUES ((SELECT MAX(id) FROM visit), 1, 1, 2000)"
@@ -342,8 +389,9 @@ def run_stats(db_path):
     conn.execute("INSERT INTO pet (client_id, name, size) VALUES (?,'Toby','large')",
                  (cira,))
     toby = conn.execute("SELECT id FROM pet WHERE name='Toby'").fetchone()[0]
-    conn.execute("INSERT INTO visit (client_id, visit_date) "
-                 "VALUES (?, date('now','-5 hours','-40 days'))", (cira,))
+    conn.execute("INSERT INTO visit (client_id, visit_date, status) "
+                 "VALUES (?, date('now','-5 hours','-40 days'), 'completed')",
+                 (cira,))
     visita = conn.execute("SELECT MAX(id) FROM visit").fetchone()[0]
     conn.execute("INSERT INTO visit_service (visit_id, pet_id, service_id, price_cents) "
                  "VALUES (?, ?, 1, 2000)", (visita, toby))
@@ -365,6 +413,37 @@ def run_stats(db_path):
     body = client.get("/resumen/atrasados").get_data(as_text=True)
     check("con el plazo mas largo ya nadie esta atrasado",
           "Cira Paz" not in body)
+
+    print("\nLo pendiente no infla las cifras")
+    r = client.post("/visitas/nueva/1",
+                    data={"pick": ["1:1"], "price_1_1": "999"})
+    check("visita recibida y sin cobrar", r.status_code == 302)
+
+    # El inicio va primero para consumir el mensaje flash, que tambien
+    # nombra el monto y falsearia la comprobacion siguiente.
+    body = client.get("/").get_data(as_text=True)
+    check("el inicio avisa que hay algo pendiente", "pendiente de cobro" in body)
+    check("y hoy todavia no es una alarma", "La m\u00e1s vieja" not in body)
+
+    body = client.get("/resumen/?p=semana").get_data(as_text=True)
+    check("no entra en lo facturado del periodo",
+          "$130.00" in body and "$999.00" not in body)
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("INSERT INTO visit (client_id, visit_date, status) "
+                 "VALUES (1, date('now','-5 hours','-3 days'), 'pending')")
+    conn.execute("INSERT INTO visit_service (visit_id, pet_id, service_id, price_cents) "
+                 "VALUES ((SELECT MAX(id) FROM visit), 1, 1, 2000)")
+    conn.commit()
+    conn.close()
+
+    body = client.get("/").get_data(as_text=True)
+    check("una pendiente de otro dia si se marca como alarma",
+          "La m\u00e1s vieja" in body)
+    body = client.get("/visitas/pendientes").get_data(as_text=True)
+    check("la lista de pendientes las junta sin importar el dia",
+          body.count("Cobrar ") == 2)
 
     print("\nAjustes se defienden")
     r = client.post("/ajustes/", data={"working_days": [], "followup_days": "15"})
