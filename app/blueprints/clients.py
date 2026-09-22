@@ -6,6 +6,7 @@ from flask import (Blueprint, flash, redirect, render_template, request,
 
 from app.database import get_db
 from app.forms import clean_client
+from app.phone import format_phone
 from app.repos import clients, pets, visits
 
 bp = Blueprint("clients", __name__, url_prefix="/clientes")
@@ -17,6 +18,33 @@ def index():
     return render_template(
         "clients/list.html", rows=clients.search(term), term=term
     )
+
+
+@bp.get("/buscar")
+def search_json():
+    """Coincidencias para el buscador que responde mientras se escribe.
+
+    'destino' decide a donde lleva cada resultado: a la ficha del
+    cliente o a registrarle una visita. La URL la arma el servidor, asi
+    la pantalla no tiene que saber como se construyen las rutas.
+    """
+    term = (request.args.get("q") or "").strip()
+    if not term:
+        return {"rows": []}
+
+    endpoint = ("visits.create" if request.args.get("destino") == "visita"
+                else "clients.detail")
+
+    rows = []
+    for row in clients.search(term, limit=8):
+        phone = row["phone_display"] or format_phone(row["phone"])
+        pets = row["pet_names"]
+        rows.append({
+            "name": row["name"],
+            "sub": f"{pets} \u00b7 {phone}" if pets else phone,
+            "url": url_for(endpoint, client_id=row["id"]),
+        })
+    return {"rows": rows}
 
 
 @bp.get("/<int:client_id>")

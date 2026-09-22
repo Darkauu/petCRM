@@ -12,6 +12,7 @@ from flask import (Blueprint, flash, redirect, render_template, request,
 
 from app.clock import shift, today
 from app.forms import clean_visit
+from app.money import format_money
 from app.repos import clients, pets, services, visits
 
 bp = Blueprint("visits", __name__, url_prefix="/visitas")
@@ -26,17 +27,22 @@ def index():
         date.fromisoformat(day)
     except ValueError:
         day = today()
-    count, cents = visits.day_total(day)
+    totals = visits.day_total(day)
     return render_template(
         "visits/day.html",
         day=day,
         rows=visits.list_for_date(day),
-        count=count,
-        total_cents=cents,
+        totals=totals,
         is_today=(day == today()),
         prev_day=shift(day, -1),
         next_day=shift(day, 1),
     )
+
+
+@bp.get("/pendientes")
+def pending():
+    """Todo lo recibido y todavia sin cobrar, sin importar el dia."""
+    return render_template("visits/pending.html", rows=visits.pending_all())
 
 
 @bp.get("/nueva")
@@ -84,8 +90,20 @@ def create(client_id):
     if errors:
         return _rerender(client, pet_rows, service_rows, data, errors), 400
 
-    visits.create(client_id, data["visit_date"], data["notes"], data["lines"])
-    flash(f"Visita de {client['name']} registrada.", "ok")
+    charging = bool(request.form.get("charge"))
+    visit_id = visits.create(
+        client_id, data["visit_date"], data["notes"], data["lines"],
+        status="completed" if charging else "pending",
+    )
+    total = visits.total_for(visit_id)
+    if charging:
+        flash(f"{client['name']}: cobrado {format_money(total)}.", "ok")
+    else:
+        flash(
+            f"{client['name']} recibido. Queda pendiente de cobro "
+            f"por {format_money(total)}.",
+            "ok",
+        )
     return redirect(url_for("visits.index", dia=data["visit_date"]))
 
 
@@ -136,6 +154,56 @@ def edit(visit_id):
     visits.update(visit_id, data["visit_date"], data["notes"], data["lines"])
     flash("Visita actualizada.", "ok")
     return redirect(url_for("visits.index", dia=data["visit_date"]))
+
+
+@bp.post("/<int:visit_id>/cobrar")
+def charge(visit_id):
+    """Un toque al entregar la mascota: valida la visita y dice cuanto."""
+    visit = visits.get(visit_id)
+    if visit is None:
+        return render_template("errors/404.html"), 404
+
+    total = visits.total_for(visit_id)
+    if visits.charge(visit_id):
+        flash(f"{visit['client_name']}: cobrado {format_money(total)}.", "ok")
+    else:
+        # Doble toque, o alguien ya la cobro desde otra pantalla.
+        flash(f"Esa visita ya no estaba pendiente.", "ok")
+    return redirect(_back(visit))
+
+
+@bp.post("/<int:visit_id>/cancelar")
+def cancel(visit_id):
+    """Se llevaron la mascota sin atenderla: no se cobra, pero queda
+    el registro de que vinieron."""
+    visit = visits.get(visit_id)
+    if visit is None:
+        return render_template("errors/404.html"), 404
+
+    if visits.cancel(visit_id):
+        flash(f"Visita de {visit['client_name']} cerrada sin cobro.", "ok")
+    else:
+        flash("Esa visita ya no estaba pendiente.", "ok")
+    return redirect(_back(visit))
+
+
+@bp.post("/<int:visit_id>/reabrir")
+def reopen(visit_id):
+    """Para deshacer un cobro o una cancelacion hecha por error."""
+    visit = visits.get(visit_id)
+    if visit is None:
+        return render_template("errors/404.html"), 404
+
+    if visits.reopen(visit_id):
+        flash("Visita devuelta a pendiente de cobro.", "ok")
+    return redirect(url_for("visits.edit", visit_id=visit_id))
+
+
+def _back(visit):
+    """Vuelve a donde se venia: la lista de pendientes o el dia."""
+    if request.form.get("from") == "pending":
+        return url_for("visits.pending")
+    return url_for("visits.index", dia=visit["visit_date"])
 
 
 @bp.post("/<int:visit_id>/archivar")

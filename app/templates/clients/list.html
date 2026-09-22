@@ -3,11 +3,20 @@
 {% block heading %}Clientes{% endblock %}
 
 {% block content %}
-  <form class="search" method="get" action="{{ url_for('clients.index') }}" role="search">
-    <input type="search" name="q" value="{{ term }}" autocomplete="off"
-           placeholder="Nombre, teléfono o mascota" aria-label="Buscar cliente">
-    <button type="submit" class="btn btn-sm">Buscar</button>
-  </form>
+  {# Mismo componente que en registrar visita; solo cambia a donde
+     lleva cada resultado. #}
+  <div class="typeahead" data-search-url="{{ url_for('clients.search_json') }}">
+    <form class="search" method="get" action="{{ url_for('clients.index') }}"
+          role="search">
+      <input type="search" name="q" value="{{ term }}" autocomplete="off"
+             placeholder="Nombre, teléfono o mascota" aria-label="Buscar cliente"
+             role="combobox" aria-autocomplete="list"
+             aria-controls="search-results" aria-expanded="false">
+      <button type="submit" class="btn btn-sm">Buscar</button>
+    </form>
+    <ul class="typeahead-list list" id="search-results"
+        role="listbox" data-results hidden></ul>
+  </div>
 
   {% if rows %}
     <ul class="list">

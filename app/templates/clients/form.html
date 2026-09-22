@@ -59,7 +59,8 @@
 {% if editing %}
   <form method="post" class="danger"
         action="{{ url_for('clients.archive', client_id=client.id) }}"
-        data-confirm="¿Archivar a {{ client.name }}? Su historial se conserva.">
+        data-confirm="¿Archivar a {{ client.name }}? Su historial se conserva."
+        data-confirm-ok="Archivar">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-ghost btn-danger" type="submit">Archivar cliente</button>
   </form>

@@ -1,0 +1,32 @@
+{# Fila de visita, compartida por la vista del dia y la de pendientes.
+   El boton de cobro lleva el monto encima: el duenio lo lee en voz alta
+   al cliente y despues toca, en vez de tocar y despues averiguar. #}
+{% macro visit_row(row, origin='', show_date=false) %}
+  <li class="{% if row.status == 'pending' %}is-pending{% elif row.status == 'cancelled' %}inactive{% endif %}">
+    <a href="{{ url_for('visits.edit', visit_id=row.id) }}">
+      <span class="list-title">
+        {{ row.client_name }}
+        <span class="amount">{{ row.total_cents | money }}</span>
+      </span>
+      <span class="list-sub">
+        {%- if show_date %}{{ row.visit_date | fecha(true) }} · {% endif -%}
+        {{ row.pet_names or 'sin servicios' }}
+      </span>
+      {% if row.status == 'cancelled' %}
+        <span class="tag">se retiró sin atender</span>
+      {% endif %}
+      {% if row.notes %}<span class="list-sub">{{ row.notes }}</span>{% endif %}
+    </a>
+
+    {% if row.status == 'pending' %}
+      <form method="post" class="row-action"
+            action="{{ url_for('visits.charge', visit_id=row.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="from" value="{{ origin }}">
+        <button class="btn btn-sm" type="submit">
+          Cobrar {{ row.total_cents | money }}
+        </button>
+      </form>
+    {% endif %}
+  </li>
+{% endmacro %}

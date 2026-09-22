@@ -7,6 +7,15 @@
 {% endblock %}
 
 {% block content %}
+{% if editing %}
+  <p class="status status-{{ visit.status }}">
+    {% if visit.status == 'pending' %}Recibida, pendiente de cobro
+    {% elif visit.status == 'completed' %}Cobrada
+    {% elif visit.status == 'cancelled' %}Se retiró sin atender
+    {% else %}{{ visit.status }}{% endif %}
+  </p>
+{% endif %}
+
 <form method="post" class="form visit" novalidate
       action="{{ url_for('visits.edit', visit_id=visit.id) if editing else url_for('visits.create', client_id=client.id) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -73,15 +82,45 @@
     <strong data-total>$0.00</strong>
   </div>
 
-  <button class="btn btn-big" type="submit">
-    {{ 'Guardar cambios' if editing else 'Guardar visita' }}
-  </button>
+  {% if editing %}
+    <button class="btn btn-big" type="submit">Guardar cambios</button>
+  {% else %}
+    {# El camino normal es recibir ahora y cobrar al entregar. Guardar
+       ya cobrada existe para registrar algo que ya pasó. #}
+    <button class="btn btn-big" type="submit">Recibir</button>
+    <button class="btn btn-ghost" type="submit" name="charge" value="1">
+      Guardar y cobrar
+    </button>
+  {% endif %}
 </form>
+
+{% if editing and visit.status == 'pending' %}
+  <div class="stack stack-top">
+    <form method="post" action="{{ url_for('visits.charge', visit_id=visit.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-big" type="submit">Cobrar</button>
+    </form>
+    <form method="post" action="{{ url_for('visits.cancel', visit_id=visit.id) }}"
+          data-confirm="¿Cerrar sin cobro? Queda el registro de que vinieron."
+          data-confirm-ok="Cerrar sin cobro">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-ghost" type="submit">Se retiró sin atender</button>
+    </form>
+  </div>
+{% elif editing %}
+  <div class="stack stack-top">
+    <form method="post" action="{{ url_for('visits.reopen', visit_id=visit.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-ghost" type="submit">Volver a pendiente</button>
+    </form>
+  </div>
+{% endif %}
 
 {% if editing %}
   <form method="post" class="danger"
         action="{{ url_for('visits.archive', visit_id=visit.id) }}"
-        data-confirm="¿Eliminar esta visita? Deja de contar en los totales.">
+        data-confirm="¿Eliminar esta visita? Deja de contar en los totales."
+        data-confirm-ok="Eliminar">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-ghost btn-danger" type="submit">Eliminar visita</button>
   </form>

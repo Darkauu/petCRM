@@ -6,13 +6,28 @@
   <a class="btn btn-big btn-hero"
      href="{{ url_for('visits.pick_client') }}">Registrar visita</a>
 
+  {% if pending.count %}
+    <a class="callout {{ 'callout-warn' if pending_stale }}"
+       href="{{ url_for('visits.pending') }}">
+      <strong>{{ pending.count }} {{ 'visita pendiente' if pending.count == 1 else 'visitas pendientes' }} de cobro</strong>
+      <span>
+        {%- if pending_stale -%}
+          La más vieja es del {{ pending.oldest | fecha(true) }} →
+        {%- else -%}
+          Cobrar al entregar →
+        {%- endif -%}
+      </span>
+    </a>
+  {% endif %}
+
   <a class="tiles tiles-link" href="{{ url_for('visits.index') }}">
     <span class="tile tile-flat">
-      <span class="tile-n">{{ today_count }}</span>
-      <span class="tile-l">{{ 'visita hoy' if today_count == 1 else 'visitas hoy' }}</span>
+      <span class="tile-n">{{ totals.done_n }}</span>
+      <span class="tile-l">{{ 'visita cobrada hoy' if totals.done_n == 1
+                              else 'visitas cobradas hoy' }}</span>
     </span>
     <span class="tile tile-flat">
-      <span class="tile-n">{{ today_cents | money }}</span>
+      <span class="tile-n">{{ totals.done_cents | money }}</span>
       <span class="tile-l">cobrado hoy</span>
     </span>
   </a>

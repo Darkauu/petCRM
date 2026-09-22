@@ -109,7 +109,7 @@
 {% if editing %}
   <form method="post" class="danger"
         action="{{ url_for('pets.archive', pet_id=pet.id) }}"
-        data-confirm="¿Archivar a {{ pet.name }}?">
+        data-confirm="¿Archivar a {{ pet.name }}?" data-confirm-ok="Archivar">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-ghost btn-danger" type="submit">Archivar mascota</button>
   </form>
