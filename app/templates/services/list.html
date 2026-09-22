@@ -1,6 +1,11 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Servicios{% endblock %}
 {% block heading %}Servicios{% endblock %}
+{% block topaction %}
+  <a class="topaction btn btn-sm" href="{{ url_for('services.create') }}">
+    {{ icon('mas', 18) }} Nuevo servicio</a>
+{% endblock %}
 
 {% block content %}
   {% if rows %}
@@ -37,5 +42,6 @@
     </div>
   {% endif %}
 
-  <a class="fab" href="{{ url_for('services.create') }}" aria-label="Nuevo servicio">+</a>
+  <a class="fab" href="{{ url_for('services.create') }}"
+     aria-label="Nuevo servicio">{{ icon('mas', 26) }}</a>
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Resumen{% endblock %}
 {% block heading %}Resumen{% endblock %}
 
@@ -103,7 +104,7 @@
       <strong>{{ overdue }}
         {{ 'cliente lleva' if overdue == 1 else 'clientes llevan' }}
         más de {{ follow }} días sin venir</strong>
-      <span>Ver a quién escribirle →</span>
+      <span>Ver a quién escribirle {{ icon('flecha', 16) }}</span>
     </a>
   {% else %}
     <p class="hint">

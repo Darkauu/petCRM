@@ -169,6 +169,93 @@ def run(page, url):
     check("en ningun momento aparecio un dialogo del navegador", not native)
 
 
+def run_responsive(browser, url):
+    """La misma aplicacion en las dos formas: celular y computadora."""
+    def entrar(width, height):
+        ctx = browser.new_context(viewport={"width": width, "height": height})
+        page = ctx.new_page()
+        page.goto(f"{url}/entrar")
+        page.fill("input[name=email]", EMAIL)
+        page.fill("input[name=password]", PASSWORD)
+        page.click("button[type=submit]")
+        page.wait_for_url(lambda u: "/entrar" not in u, timeout=5000)
+        return ctx, page
+
+    def caja(page, selector):
+        return page.evaluate(
+            "s => { const e = document.querySelector(s);"
+            "       if (!e) return null;"
+            "       const b = e.getBoundingClientRect();"
+            "       return {x: b.x, y: b.y, w: b.width, h: b.height,"
+            "               visible: b.width > 0 && b.height > 0}; }", selector)
+
+    print("\nEn el celular (390px)")
+    ctx, page = entrar(390, 760)
+    for ruta in ("/", "/clientes/", "/resumen/", "/visitas/", "/ajustes/"):
+        page.goto(url + ruta)
+        ancho = page.evaluate("document.documentElement.scrollWidth")
+        if ancho > 390:
+            check(f"{ruta} no se desborda a lo ancho", False, f"scrollWidth={ancho}")
+            break
+    else:
+        check("ninguna pantalla se desborda a lo ancho", True)
+
+    page.goto(f"{url}/clientes/")
+    nav = caja(page, ".tabbar")
+    check("la barra de secciones va abajo, como en una app",
+          nav["y"] > 500, nav)
+    check("ocupa todo el ancho", nav["w"] == 390, nav)
+    check("el boton flotante esta a mano", caja(page, ".fab")["visible"])
+    check("y la accion de arriba se esconde",
+          not caja(page, ".topaction")["visible"])
+
+    # Objetivo tactil: lo que se toca tiene que caber bajo un pulgar.
+    chico = page.evaluate("""() => {
+      const sel = '.tabbar a, .btn, .fab, .list li > a';
+      return [...document.querySelectorAll(sel)]
+        .map(e => ({t: e.textContent.trim().slice(0, 24),
+                    h: e.getBoundingClientRect().height}))
+        .filter(x => x.h > 0 && x.h < 44);
+    }""")
+    check("todo lo tocable mide al menos 44px de alto", not chico, chico)
+    ctx.close()
+
+    print("\nEn la computadora (1280px)")
+    ctx, page = entrar(1280, 800)
+    for ruta in ("/", "/clientes/", "/resumen/", "/visitas/", "/ajustes/"):
+        page.goto(url + ruta)
+        ancho = page.evaluate("document.documentElement.scrollWidth")
+        if ancho > 1280:
+            check(f"{ruta} no se desborda a lo ancho", False, f"scrollWidth={ancho}")
+            break
+    else:
+        check("ninguna pantalla se desborda a lo ancho", True)
+
+    page.goto(f"{url}/clientes/")
+    nav = caja(page, ".tabbar")
+    check("la misma barra pasa a la izquierda, como en una web",
+          nav["x"] == 0 and nav["y"] < 50 and nav["h"] > 600, nav)
+    check("y deja de ocupar todo el ancho", nav["w"] < 300, nav)
+    check("el boton flotante desaparece", not caja(page, ".fab")["visible"])
+    check("la accion sube junto al titulo",
+          caja(page, ".topaction")["visible"])
+
+    contenido = caja(page, ".wrap")
+    check("el contenido arranca justo despues de la barra, sin hueco",
+          abs(contenido["x"] - nav["w"]) < 2, (contenido, nav))
+    check("y no se estira hasta ser ilegible", contenido["w"] <= 1100, contenido)
+
+    page.goto(f"{url}/clientes/nuevo")
+    form = caja(page, ".form")
+    check("un formulario no se estira a todo lo ancho",
+          form["w"] <= 560, form)
+
+    # Mismo HTML, distinta colocacion: nada se duplico para el escritorio.
+    check("la barra de secciones es una sola en el HTML",
+          page.evaluate("document.querySelectorAll('.tabbar').length") == 1)
+    ctx.close()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--chromium", default=None,
@@ -195,6 +282,7 @@ if __name__ == "__main__":
             browser = pw.chromium.launch(**launch)
             page = browser.new_page(viewport={"width": 390, "height": 780})
             run(page, f"http://127.0.0.1:{PORT}")
+            run_responsive(browser, f"http://127.0.0.1:{PORT}")
             browser.close()
     finally:
         server.shutdown()

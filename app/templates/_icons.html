@@ -1,0 +1,36 @@
+{# Iconos en SVG, no caracteres tipograficos ni emoji: un glifo depende
+   de la fuente del sistema y se ve distinto en cada aparato. Todos
+   heredan el color del texto y llevan aria-hidden, porque al lado
+   siempre hay una etiqueta escrita. #}
+{% macro icon(name, size=22) -%}
+<svg class="ico" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24"
+     fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  {%- if name == 'inicio' -%}
+    <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>
+  {%- elif name == 'visitas' -%}
+    <rect x="3" y="5" width="18" height="16" rx="2"/>
+    <path d="M8 3v4M16 3v4M3 10h18M9.5 15.5l1.8 1.8 3.2-3.6"/>
+  {%- elif name == 'resumen' -%}
+    <path d="M3 21h18M7 21v-7M12 21V6M17 21v-11"/>
+  {%- elif name == 'clientes' -%}
+    <circle cx="9" cy="8" r="3.5"/>
+    <path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 5.2a3.5 3.5 0 0 1 0 7M17.6 14.6A6.5 6.5 0 0 1 21.5 20"/>
+  {%- elif name == 'servicios' -%}
+    <path d="M20.6 13.4 12 22l-9-9V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"/>
+    <circle cx="7.5" cy="7.5" r="1.3"/>
+  {%- elif name == 'mas' -%}
+    <path d="M12 5v14M5 12h14"/>
+  {%- elif name == 'anterior' -%}
+    <path d="m15 5-7 7 7 7"/>
+  {%- elif name == 'siguiente' -%}
+    <path d="m9 5 7 7-7 7"/>
+  {%- elif name == 'flecha' -%}
+    <path d="M5 12h14M13 6l6 6-6 6"/>
+  {%- elif name == 'whatsapp' -%}
+    <path d="M20.5 11.6a8.4 8.4 0 0 1-12.3 7.4L3.5 20.5l1.6-4.6a8.4 8.4 0 1 1 15.4-4.3z"/>
+  {%- elif name == 'salir' -%}
+    <path d="M15 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v2M10 12h11M18 9l3 3-3 3"/>
+  {%- endif -%}
+</svg>
+{%- endmacro %}

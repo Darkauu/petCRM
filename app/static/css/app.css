@@ -14,6 +14,7 @@
   --warn-bg:   #fef4e6;
   --ok:        #0f766e;
   --ok-bg:     #e7f4f2;
+  --accent-soft: #e2f0ee;
   --radius:    12px;
   --tap:       48px;
 }
@@ -32,6 +33,7 @@
     --warn-bg: #2e2513;
     --ok:      #2dd4bf;
     --ok-bg:   #12312e;
+    --accent-soft: #10312e;
   }
 }
 
@@ -444,3 +446,139 @@ code {
   font-size: .875em; background: var(--surface);
   border: 1px solid var(--border); border-radius: 4px; padding: .05rem .3rem;
 }
+
+/* =====================================================================
+   Dos formas de la misma aplicacion
+   ---------------------------------------------------------------------
+   El mismo HTML se coloca distinto segun el ancho: en el celular, barra
+   de secciones abajo, como una app; en la computadora, barra lateral y
+   contenido mas ancho, como una web. No hay markup duplicado ni JS de
+   por medio, solo colocacion.
+   ===================================================================== */
+
+.ico { flex-shrink: 0; }
+
+/* La accion principal vive en el boton flotante en el celular y
+   arriba, junto al titulo, en la computadora. Es el mismo enlace
+   mostrado donde se busca en cada tamanio. */
+.topaction { display: none; align-items: center; gap: .375rem; }
+
+/* La barra de secciones lleva icono y etiqueta: el icono se reconoce de
+   lejos, la etiqueta quita la ambiguedad. Nunca el icono solo. */
+.tabbar a {
+  display: flex; flex-direction: column; align-items: center; gap: .125rem;
+}
+.tabbar .brand { display: none; }
+
+/* Sensaciones de toque y de puntero. Solo donde hay puntero fino: en el
+   celular, un :hover pegado al tacto se queda encendido tras el toque. */
+@media (hover: hover) and (pointer: fine) {
+  .list li > a:hover, .tabbar a:hover, .chip-link:hover { background: var(--accent-soft); }
+  .btn:hover { filter: brightness(1.06); }
+  .btn-ghost:hover { background: var(--accent-soft); }
+}
+.list li > a, .tabbar a, .btn, .chip-link, .line-face {
+  transition: background-color .12s ease, color .12s ease, filter .12s ease;
+}
+
+/* Un foco visible en TODO lo operable, no solo en los campos: sin esto
+   no se puede usar el sistema con el teclado. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}
+
+/* ---- Computadora ---------------------------------------------------- */
+
+@media (min-width: 900px) {
+  body {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 100vh;
+    padding-bottom: 0;
+  }
+
+  .tabbar {
+    position: sticky; top: 0; align-self: start;
+    grid-column: 1; grid-row: 1 / -1;
+    height: 100vh; overflow-y: auto;
+    flex-direction: column; justify-content: flex-start; gap: .125rem;
+    padding: 1.25rem .75rem;
+    border-top: 0; border-right: 1px solid var(--border);
+  }
+  .tabbar .brand {
+    display: block; margin: 0 0 1rem; padding: 0 .75rem;
+    font-size: 1.0625rem; font-weight: 700;
+  }
+  .tabbar a {
+    flex: 0 0 auto; flex-direction: row; justify-content: flex-start;
+    gap: .75rem; padding: .625rem .75rem; font-size: .9375rem;
+    border-radius: var(--radius);
+  }
+  .tabbar a.on { background: var(--accent-soft); }
+
+  .topbar { grid-column: 2; grid-row: 1; }
+  .topbar-inner { max-width: 68rem; margin: 0 auto; padding: .75rem 2rem; }
+  .topbar h1 { font-size: 1.25rem; }
+
+  .wrap {
+    grid-column: 2; grid-row: 2;
+    /* width: 100% es necesario: en una rejilla, el 'margin: 0 auto' que
+       trae .wrap de base impide que el elemento se estire, y se encoge
+       al ancho de su contenido dejando un hueco al lado de la barra. */
+    width: 100%; max-width: 68rem; margin-inline: auto;
+    padding: 1.5rem 2rem 3rem;
+  }
+
+  /* En pantalla ancha el boton flotante sobra: la accion vive arriba,
+     junto al titulo, que es donde se busca en una web. */
+  .fab { display: none; }
+  .topaction { display: inline-flex; }
+
+  /* Un formulario de 1100px de ancho no se lee: los campos quedan tan
+     largos que se pierde de vista que se estaba escribiendo. */
+  .form, .search, .typeahead, .contact, .daynav, .danger, .stack { max-width: 34rem; }
+  .note, .hint, .gap, .cmd, .empty p { max-width: 65ch; }
+
+  /* Las listas aprovechan el ancho en vez de dejar medio metro vacio. */
+  .list {
+    display: grid; gap: .5rem;
+    grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
+  }
+  .list li { margin-bottom: 0; }
+  .typeahead-list { display: block; }
+  .typeahead-list li { margin-bottom: .125rem; }
+
+  .tiles { max-width: 46rem; }
+  .bars, .headline { max-width: 44rem; }
+  .totalbar { bottom: 0; max-width: 34rem; }
+
+  /* Con raton no hace falta un boton del ancho de un pulgar: las
+     flechas se ajustan a su icono y el dia queda al centro. */
+  .daynav { max-width: 24rem; }
+  .daynav .btn { flex: 0 0 auto; padding: 0 .875rem; }
+  .daynav-label, .daynav .btn-ghost:not([aria-label]) { flex: 1; }
+  .modal { max-width: 26rem; }
+}
+
+/* Entre celular y computadora: mas aire a los lados, todavia una
+   columna. Sin esto, en una tablet el contenido queda pegado al borde. */
+@media (min-width: 600px) and (max-width: 899px) {
+  .wrap { padding: 1.25rem 2rem; }
+  .topbar-inner { padding: .5rem 2rem; }
+}
+
+/* Botones que llevan icono y texto. */
+.btn .ico { margin-right: .375rem; }
+.btn-sm .ico { margin-right: .25rem; }
+.callout span .ico { vertical-align: -.2em; margin-left: .125rem; }
+.daynav .btn .ico { margin: 0; }

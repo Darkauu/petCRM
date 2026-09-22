@@ -1,3 +1,4 @@
+{% from "_icons.html" import icon %}
 <!doctype html>
 <html lang="es">
 <head>
@@ -30,17 +31,28 @@
 </main>
 
 {% block nav %}
-<nav class="tabbar">
+<nav class="tabbar" aria-label="Secciones">
+  <p class="brand">{{ biz_name or 'PetCRM' }}</p>
   <a href="{{ url_for('main.home') }}"
-     class="{{ 'on' if request.endpoint == 'main.home' }}">Inicio</a>
+     class="{{ 'on' if request.endpoint == 'main.home' }}"
+     {{ 'aria-current=page' if request.endpoint == 'main.home' }}>
+    {{ icon('inicio') }}<span>Inicio</span></a>
   <a href="{{ url_for('visits.index') }}"
-     class="{{ 'on' if request.blueprint == 'visits' }}">Visitas</a>
+     class="{{ 'on' if request.blueprint == 'visits' }}"
+     {{ 'aria-current=page' if request.blueprint == 'visits' }}>
+    {{ icon('visitas') }}<span>Visitas</span></a>
   <a href="{{ url_for('stats.summary') }}"
-     class="{{ 'on' if request.blueprint == 'stats' }}">Resumen</a>
+     class="{{ 'on' if request.blueprint == 'stats' }}"
+     {{ 'aria-current=page' if request.blueprint == 'stats' }}>
+    {{ icon('resumen') }}<span>Resumen</span></a>
   <a href="{{ url_for('clients.index') }}"
-     class="{{ 'on' if request.blueprint in ('clients', 'pets') }}">Clientes</a>
+     class="{{ 'on' if request.blueprint in ('clients', 'pets') }}"
+     {{ 'aria-current=page' if request.blueprint in ('clients', 'pets') }}>
+    {{ icon('clientes') }}<span>Clientes</span></a>
   <a href="{{ url_for('services.index') }}"
-     class="{{ 'on' if request.blueprint == 'services' }}">Servicios</a>
+     class="{{ 'on' if request.blueprint == 'services' }}"
+     {{ 'aria-current=page' if request.blueprint == 'services' }}>
+    {{ icon('servicios') }}<span>Servicios</span></a>
 </nav>
 {% endblock %}
 
