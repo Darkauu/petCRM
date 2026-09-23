@@ -45,6 +45,21 @@ def pending():
     return render_template("visits/pending.html", rows=visits.pending_all())
 
 
+def _dia_pedido():
+    """El dia que traiga la URL, si es uno valido y no esta en el futuro.
+
+    Registrar desde un dia pasado tiene que crear la visita CON esa
+    fecha: es la forma de cargar a mano lo que no se anoto en su
+    momento. None significa hoy.
+    """
+    crudo = request.args.get("dia") or ""
+    try:
+        pedido = date.fromisoformat(crudo)
+    except ValueError:
+        return None
+    return crudo if pedido <= date.fromisoformat(today()) else None
+
+
 @bp.get("/nueva")
 def pick_client():
     """Paso 1: a quien se atendio. Los ultimos atendidos van de primero."""
@@ -52,6 +67,7 @@ def pick_client():
     return render_template(
         "visits/pick.html",
         term=term,
+        dia=_dia_pedido(),
         rows=clients.search(term) if term else None,
         recent=visits.recent_clients(),
     )
@@ -82,7 +98,7 @@ def create(client_id):
             client=client, pet_rows=pet_rows, service_rows=service_rows,
             grid=_grid(client_id, pet_rows, service_rows),
             picked=set(), abiertas=abiertas,
-            visit={"visit_date": today()}, errors={},
+            visit={"visit_date": _dia_pedido() or today()}, errors={},
         )
 
     data, errors = clean_visit(
@@ -205,10 +221,16 @@ def reopen(visit_id):
 
 
 def _back(visit):
-    """Vuelve a donde se venia: el inicio, los pendientes o el dia."""
+    """Vuelve a donde se venia: el inicio, los pendientes o el dia.
+
+    Al inicio se vuelve con ancla. Cobrar desde la lista de abajo
+    mandaba la pantalla al tope y habia que bajar otra vez por cada
+    visita; el ancla la deja en la seccion. Con JS se restaura la
+    posicion exacta (static/js/app.js).
+    """
     origen = request.form.get("from")
     if origen == "home":
-        return url_for("main.home")
+        return url_for("main.home") + "#pendientes"
     if origen == "pending":
         return url_for("visits.pending")
     return url_for("visits.index", dia=visit["visit_date"])

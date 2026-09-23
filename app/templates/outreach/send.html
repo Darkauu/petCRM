@@ -23,7 +23,7 @@
       {{ row.pet_names or 'sin mascotas' }}
       {%- if row.last_visit_date %} · hace {{ row.days }} días
       {%- else %} · sin visitas registradas{% endif %}
-      · {{ row.phone_display or (row.phone | phone) }}
+      · {{ row.phone | phone }}
     </p>
 
     <p class="burbuja">{{ texto }}</p>

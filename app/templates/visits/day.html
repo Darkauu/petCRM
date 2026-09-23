@@ -3,10 +3,6 @@
 {% from "visits/_row.html" import visit_row %}
 {% block title %}Visitas{% endblock %}
 {% block heading %}{{ 'Hoy' if is_today else day }}{% endblock %}
-{% block topaction %}
-  <a class="topaction btn btn-sm" href="{{ url_for('visits.pick_client') }}">
-    {{ icon('mas', 18) }} Registrar visita</a>
-{% endblock %}
 
 {% block content %}
   <nav class="daynav">
@@ -22,6 +18,16 @@
        href="{{ url_for('visits.index', dia=next_day) }}"
        aria-label="Día siguiente">{{ icon('siguiente', 18) }}</a>
   </nav>
+
+  {# Debajo del día y encima de lo cobrado, a propósito: lo primero que
+     se hace al abrir esta pantalla es registrar, no leer. Va siempre,
+     también en un día pasado, y ahí la visita nace con ESA fecha: es
+     como se cargan a mano las que no se anotaron en su momento. #}
+  <a class="btn btn-big btn-cta"
+     href="{{ url_for('visits.pick_client', dia=none if is_today else day) }}">
+    {{ icon('mas', 20) }}
+    Registrar visita{{ '' if is_today else ' del ' ~ (day | fecha) }}
+  </a>
 
   <div class="tiles">
     <div class="tile tile-flat">
@@ -48,7 +54,4 @@
             else 'No hay visitas registradas ese día.' }}</p>
     </div>
   {% endif %}
-
-  <a class="fab" href="{{ url_for('visits.pick_client') }}"
-     aria-label="Registrar visita">{{ icon('mas', 26) }}</a>
 {% endblock %}

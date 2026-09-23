@@ -11,7 +11,7 @@
   {% if client.phone %}
     <div class="contact">
       <a class="btn btn-ghost" href="tel:{{ client.phone }}">
-        {{ client.phone_display or (client.phone | phone) }}
+        {{ client.phone | phone }}
       </a>
       <a class="btn btn-ghost" href="https://wa.me/{{ client.phone[1:] }}"
          target="_blank" rel="noopener">{{ icon('whatsapp', 18) }} WhatsApp</a>

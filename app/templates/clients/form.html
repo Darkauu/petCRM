@@ -23,8 +23,12 @@
      poder editarles lo demás sin inventar uno. #}
   <label class="field {{ 'bad' if errors.phone }}">
     <span>Teléfono</span>
+    {# Canónico al abrir. Si no se pudo leer, de vuelta tal cual se
+       escribió: mostrar el campo en blanco obligaría a teclearlo
+       entero otra vez para corregir un dígito. #}
     <input name="phone" type="tel" inputmode="tel"
-           value="{{ client.phone_display or client.phone or '' }}"
+           value="{{ request.form.get('phone', '') if errors.phone
+                     else (client.phone | phone) }}"
            placeholder="6123-4567">
     {% if errors.phone %}<em>{{ errors.phone }}</em>
     {% else %}<em class="ayuda">Sin él no se le puede escribir por WhatsApp.</em>

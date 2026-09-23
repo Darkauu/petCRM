@@ -110,6 +110,20 @@ def seeded_app():
                 "medical_notes": None, "is_active": 1})
             visits.create(cid, shift(today(), -dias), None,
                           [(pid, 1, 2000)], status="completed")
+
+        # Ocho pendientes: sin suficiente alto, el inicio no tiene
+        # scroll y la prueba de que no salta al tope no probaria nada.
+        for i in range(8):
+            cid = clients.create({
+                "name": f"Pendiente {i}", "phone": f"+5076010{i:04d}",
+                "phone_display": None, "document": None, "email": None,
+                "address": None, "notes": None})
+            pid = pets.create({
+                "client_id": cid, "name": f"Perro{i}", "species": "dog",
+                "breed": None, "size": "small", "sex": None,
+                "birthdate": None, "weight_kg": None, "temperament": None,
+                "medical_notes": None, "is_active": 1})
+            visits.create(cid, today(), None, [(pid, 1, 1500)])
         get_db().commit()
     return app
 
@@ -344,6 +358,54 @@ def run(page, url):
           segundo != primero, f"{primero} -> {segundo}")
     check("la cuenta lo refleja", "2 de 3" in page.inner_text(".avance-txt"),
           page.inner_text(".avance-txt"))
+
+    print("\nCobrar desde el inicio no manda la pantalla al tope")
+    page.goto(f"{url}/")
+    page.wait_for_timeout(200)
+    alto = page.evaluate("document.documentElement.scrollHeight")
+    check("el inicio es mas alto que la pantalla, si no esto no prueba nada",
+          alto > 900, alto)
+
+    # Hasta el ultimo boton de cobro, que es el caso que dolia: cobrar
+    # ahi mandaba la vista arriba del todo y habia que bajar otra vez.
+    ultimo = page.locator(".list li.is-pending .row-action button").last
+    ultimo.scroll_into_view_if_needed()
+    page.wait_for_timeout(200)
+    antes = page.evaluate("window.scrollY")
+    check("se bajo de verdad hasta el ultimo pendiente", antes > 200, antes)
+
+    ultimo.click()
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(400)
+    despues = page.evaluate("window.scrollY")
+    check("despues de cobrar la vista se queda donde estaba",
+          abs(despues - antes) < 120, f"{antes} -> {despues}")
+    check("y el cobro si ocurrio", "cobrado" in page.inner_text("body").lower())
+
+    print("\nLa accion principal no es del color de la pantalla")
+    colores = page.evaluate("""() => {
+      const cta = document.querySelector('.btn-cta');
+      const barra = document.querySelector('.topbar');
+      return cta && {boton: getComputedStyle(cta).backgroundColor,
+                     barra: getComputedStyle(barra).backgroundColor};
+    }""")
+    check("el boton de registrar visita tiene su propio color",
+          colores and colores["boton"] != colores["barra"], colores)
+
+    page.goto(f"{url}/visitas/")
+    caja = page.evaluate("""() => {
+      const b = document.querySelector('.btn-cta');
+      const nav = document.querySelector('.daynav');
+      const tiles = document.querySelector('.tiles');
+      if (!b) return null;
+      return {boton: b.getBoundingClientRect().top,
+              dia: nav.getBoundingClientRect().bottom,
+              cobrado: tiles.getBoundingClientRect().top,
+              alto: b.getBoundingClientRect().height};
+    }""")
+    check("en visitas va entre el dia y lo cobrado",
+          caja and caja["dia"] <= caja["boton"] < caja["cobrado"], caja)
+    check("y es de tamanio de pulgar", caja and caja["alto"] >= 44, caja)
 
     print("\nDia y noche")
     page.goto(f"{url}/resumen/")

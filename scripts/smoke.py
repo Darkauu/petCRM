@@ -81,6 +81,27 @@ def run_flow(db_path):
     check("el mismo telefono en otro formato se detecta como duplicado",
           r.status_code == 400 and "Marta Rios" in r.get_data(as_text=True))
 
+    # Se teclea como se quiera; se ve siempre igual. Antes la misma
+    # lista mostraba '61234567', '6123-4567' y '+507 6123 4567' segun
+    # como lo hubiera escrito cada quien.
+    client.post("/clientes/nuevo", data={"name": "Beto Lima", "phone": "60099887"})
+    for ruta in ("/clientes/2", "/clientes/"):
+        body = client.get(ruta).get_data(as_text=True)
+        # Sin los href: 'tel:' y 'wa.me' llevan los digitos pelados a
+        # proposito, y ahi si tienen que estar.
+        visible = re.sub(r'href="[^"]*"', "", body)
+        check(f"el telefono se ve como 6009-9887 en {ruta}",
+              "6009-9887" in visible and "60099887" not in visible,
+              visible[:400])
+    body = client.get("/clientes/2/editar").get_data(as_text=True)
+    check("y el formulario tambien lo abre en ese formato",
+          'value="6009-9887"' in body, body[body.find('name="phone"') - 40:][:220])
+
+    r = client.post("/clientes/2/editar",
+                    data={"name": "Beto Lima", "phone": "no es un numero"})
+    check("un telefono ilegible se devuelve tal cual para corregirlo",
+          r.status_code == 400 and "no es un numero" in r.get_data(as_text=True))
+
     r = client.post("/clientes/1/mascotas/nueva",
                     data={"name": "Toby", "size": "small",
                           "breed": "Schnauzer", "temperament": "muerde al secar"})
@@ -196,6 +217,18 @@ def run_flow(db_path):
     check("el cobro dice cuanto se factur\u00f3", "cobrado $43.00" in body, body[:400])
     check("ahora si cuenta como cobrado del dia", "$43.00" in body)
     check("y el boton de cobrar desaparece", "Cobrar $43.00" not in body)
+
+    # Cobrando desde el inicio se vuelve a la seccion de pendientes, no
+    # al tope: la lista vive abajo y con cada cobro habia que bajar otra
+    # vez. El ancla lo resuelve sin JS; el JS lo afina al pixel.
+    client.post("/visitas/1/reabrir")
+    r = client.post("/visitas/1/cobrar", data={"from": "home"})
+    check("cobrar desde el inicio vuelve a la seccion, no al tope",
+          r.status_code == 302 and r.headers["Location"].endswith("#pendientes"),
+          r.headers.get("Location"))
+    body = client.get("/").get_data(as_text=True)
+    check("y esa seccion existe para que el ancla caiga en algo",
+          'id="pendientes"' in body)
 
     r = client.post("/visitas/1/cobrar", follow_redirects=True)
     check("un segundo toque no vuelve a cobrar",
@@ -1627,6 +1660,164 @@ def run_outreach(db_path):
     check("pero los demas siguen", "Don Pedro" in body)
 
 
+def run_paging(db_path):
+    """El panel de clientes va de a diez, no se trae la base entera."""
+    import re
+
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db_path
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    app = create_app(Cfg)
+    client = sign_in(app.test_client())
+    client.post("/servicios/nuevo",
+                data={"name": "Bano", "price_mode": "any", "price_any": "20"})
+
+    tallas = ["small", "medium", "large"]
+    for i in range(1, 24):
+        client.post("/clientes/nuevo",
+                    data={"name": f"Cliente {i:02d}", "phone": f"6{i:03d}0000"})
+        client.post(f"/clientes/{i}/mascotas/nueva",
+                    data={"name": f"Perro{i}", "size": tallas[i % 3]})
+    with app.app_context():
+        from app.clock import shift, today
+        from app.database import get_db
+        from app.repos import visits
+        for i in range(1, 24):
+            visits.create(i, shift(today(), -(i * 3)), None, [(i, 1, 2000)],
+                          status="completed")
+        get_db().commit()
+
+    def filas(url):
+        body = client.get(url).get_data(as_text=True)
+        return re.findall(r'list-title">([^<]+)</span>', body), body
+
+    def pie(url):
+        """El texto del paginador, con los saltos de linea aplanados."""
+        body = client.get(url).get_data(as_text=True)
+        m = re.search(r'pager-txt">(.*?)</span>', body, re.S)
+        return " ".join(m.group(1).split()) if m else ""
+
+    print("\nEl panel no se trae la base entera")
+
+    nombres, body = filas("/clientes/")
+    check("la primera pagina trae diez, no veintitres", len(nombres) == 10,
+          len(nombres))
+    check("y son los diez primeros por nombre",
+          nombres[0] == "Cliente 01" and nombres[-1] == "Cliente 10", nombres)
+    check("dice por cual va y cuantos hay",
+          pie("/clientes/") == "1 de 3 · 23 clientes", pie("/clientes/"))
+
+    nombres, _ = filas("/clientes/?p=2")
+    check("la segunda sigue donde termino la primera",
+          nombres[0] == "Cliente 11" and len(nombres) == 10, nombres)
+    nombres, _ = filas("/clientes/?p=3")
+    check("la ultima trae solo los que quedan", len(nombres) == 3, nombres)
+
+    # 'p' llega de la URL: no puede dejar la pantalla en blanco.
+    nombres, _ = filas("/clientes/?p=99")
+    check("una pagina que no existe cae en la ultima",
+          nombres == ["Cliente 21", "Cliente 22", "Cliente 23"], nombres)
+    nombres, _ = filas("/clientes/?p=abc")
+    check("y una que no es un numero, en la primera",
+          nombres[0] == "Cliente 01", nombres[:2])
+    nombres, _ = filas("/clientes/?p=-5")
+    check("tampoco se puede pedir una pagina negativa",
+          nombres[0] == "Cliente 01", nombres[:2])
+
+    print("\nBuscando se ve todo lo que coincide")
+
+    nombres, body = filas("/clientes/?q=Cliente 1")
+    check("quien escribio un nombre ya acoto solo", len(nombres) == 12,
+          len(nombres))
+    check("asi que ahi no hay paginador", "pager-txt" not in body)
+
+    print("\nLos filtros tambien paginan, y siguen contando bien")
+
+    nombres, body = filas("/clientes/?f=escribir")
+    check("el grupo trae su propia cuenta",
+          pie("/clientes/?f=escribir") == "1 de 2 · 18 clientes",
+          pie("/clientes/?f=escribir"))
+    check("y su pagina es de diez", len(nombres) == 10, len(nombres))
+    check("ordenado por quien lleva mas esperando",
+          nombres[0] == "Cliente 23", nombres[:3])
+
+    _nombres, body = filas("/clientes/")
+    for etiqueta, esperado in (("Todos", 23), ("Por escribir", 18),
+                               ("Perros peque", 7)):
+        m = re.search(etiqueta + r'[^<]*<span class="chip-n">(\d+)</span>', body)
+        check(f"la pestania '{etiqueta}' cuenta sobre TODA la base, no sobre la pagina",
+              m is not None and int(m.group(1)) == esperado,
+              m.group(1) if m else "(no esta)")
+
+    # El boton de envio manda al grupo entero, no a los diez de pantalla.
+    check("el boton de escribirles nombra al grupo completo",
+          "Escribirle a los 18" in body.replace("\n", " ")
+          or "Escribirle a los 18" in client.get(
+              "/clientes/?f=escribir").get_data(as_text=True).replace("\n", " "))
+
+
+def run_backdate(db_path):
+    """Registrar a mano una visita de otro dia."""
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db_path
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    app = create_app(Cfg)
+    client = sign_in(app.test_client())
+    client.post("/servicios/nuevo",
+                data={"name": "Bano", "price_mode": "any", "price_any": "20"})
+    client.post("/clientes/nuevo", data={"name": "Ana Vega", "phone": "61234567"})
+    client.post("/clientes/1/mascotas/nueva", data={"name": "Rocky", "size": "small"})
+
+    with app.app_context():
+        from app.clock import shift, today
+        hoy = today()
+        ayer = shift(hoy, -1)
+        manana = shift(hoy, 1)
+
+    print("\nRegistrar visita, desde cualquier dia")
+
+    body = client.get("/visitas/").get_data(as_text=True)
+    check("el boton vive en la pantalla, no solo flotando",
+          "btn-cta" in body and "Registrar visita" in body, body[:600])
+    # Debajo del dia y encima de lo cobrado: es lo primero que se hace
+    # al abrir, antes que leer.
+    check("va entre el dia y lo cobrado",
+          body.index("daynav") < body.index("btn-cta") < body.index("tiles"))
+
+    body = client.get(f"/visitas/?dia={ayer}").get_data(as_text=True)
+    check("tambien esta en un dia pasado", "btn-cta" in body)
+    check("y dice de que dia va a ser", f"dia={ayer}" in body, body[:900])
+
+    body = client.get(f"/visitas/nueva?dia={ayer}").get_data(as_text=True)
+    check("el selector avisa con que fecha se va a guardar",
+          "Se registrar" in body and "fecha" in body, body[:900])
+
+    body = client.get(f"/visitas/nueva/1?dia={ayer}").get_data(as_text=True)
+    check("y el formulario abre con ESA fecha, no con hoy",
+          f'value="{ayer}"' in body, body[body.find("visit_date") - 80:][:200])
+
+    r = client.post(f"/visitas/nueva/1?dia={ayer}",
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "20",
+                          "visit_date": ayer, "charge": "1"})
+    check("la visita se guarda en el dia de ayer", r.status_code == 302)
+    body = client.get(f"/visitas/?dia={ayer}").get_data(as_text=True)
+    check("y aparece ahi", "Ana Vega" in body and "$20.00" in body)
+    check("no en hoy", "Ana Vega" not in client.get("/visitas/").get_data(as_text=True))
+
+    # 'dia' llega de la URL: una fecha futura no puede colarse.
+    body = client.get(f"/visitas/nueva/1?dia={manana}").get_data(as_text=True)
+    check("un dia futuro se ignora y queda hoy",
+          f'value="{hoy}"' in body, body[body.find("visit_date") - 80:][:200])
+    body = client.get("/visitas/nueva/1?dia=no-es-fecha").get_data(as_text=True)
+    check("y una fecha ilegible tambien", f'value="{hoy}"' in body)
+
+
 def short_date_of(app, iso, weekday=False):
     with app.app_context():
         from app.labels import short_date
@@ -1642,7 +1833,8 @@ def shift_of(app, iso, days):
 if __name__ == "__main__":
     for runner in (run_flow, run_csrf, run_stats, run_interface,
                    run_schema_guard, run_auto_migrate, run_auth,
-                   run_backups, run_seed, run_import, run_outreach):
+                   run_backups, run_seed, run_import, run_outreach,
+                   run_paging, run_backdate):
         path = fresh_db()
         try:
             runner(path)

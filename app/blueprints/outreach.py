@@ -63,22 +63,17 @@ def index():
 @bp.route("/nuevo", methods=["GET", "POST"])
 def create():
     plazo = settings.followup_days()
-    todos = outreach.candidates()
 
     # Se pueden combinar: "atrasados" Y "perros pequenios" es justo la
     # pregunta que se hace quien quiere mandar una promo de talla chica.
     elegidos = [g for g in request.values.getlist("g")
                 if g in segments.CLAVES_COMUNES]
 
-    rows = todos
-    for clave, _label, cumple in GRUPOS:
-        if clave in elegidos:
-            rows = [r for r in rows if cumple(r, plazo)]
-
-    grupos = [{
-        "key": clave, "label": label, "on": clave in elegidos,
-        "count": sum(1 for r in todos if cumple(r, plazo)),
-    } for clave, label, cumple in GRUPOS]
+    rows = outreach.candidates(elegidos, plazo)
+    cuentas = outreach.candidate_counts(GRUPOS, plazo)
+    grupos = [{"key": clave, "label": label, "on": clave in elegidos,
+               "count": cuentas.get(clave, 0)}
+              for clave, label, _cond in GRUPOS]
 
     mensaje = (request.form.get("message") or "").strip()
     nombre = (request.form.get("name") or "").strip()

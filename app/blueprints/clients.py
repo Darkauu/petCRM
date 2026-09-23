@@ -17,39 +17,58 @@ bp = Blueprint("clients", __name__, url_prefix="/clientes")
 # pantalla de envios: la misma pregunta tiene que dar el mismo numero
 # en los dos lados.
 FILTROS = segments.PANEL
+PAGINA = clients.PAGINA
 
 
 @bp.get("/")
 def index():
     term = request.args.get("q", "")
     elegido = request.args.get("f", "")
+    if elegido not in segments.CLAVES_PANEL:
+        elegido = ""
+    claves = [elegido] if elegido else []
     plazo = settings.followup_days()
 
-    todos = clients.list_with_status(term)
+    # Los numeros de las pestanias salen de UNA consulta, no de traerse
+    # la tabla entera y contarla en memoria.
+    cuentas = clients.group_counts(term, FILTROS, plazo)
+    grupos = [{"key": "", "label": "Todos", "count": cuentas.get("", 0)}]
+    grupos += [{"key": key, "label": label, "count": cuentas.get(key, 0)}
+               for key, label, _cond in FILTROS]
 
-    # Se cuentan todos los grupos en una sola pasada: el numero al lado
-    # de cada pestania es parte de la respuesta, no un adorno.
-    grupos = [{"key": "", "label": "Todos", "count": len(todos)}]
-    for key, label, cumple in FILTROS:
-        grupos.append({"key": key, "label": label,
-                       "count": sum(1 for r in todos if cumple(r, plazo))})
+    # Buscando se muestra todo lo que coincide: quien escribio un nombre
+    # ya acoto solo. Sin buscar, la lista va de a diez, porque una base
+    # de trescientos clientes no tiene por que viajar entera al celular
+    # cada vez que se abre la pantalla.
+    paginado = not term.strip()
+    total = cuentas.get(elegido or "", 0)
+    pagina = _pagina(request.args.get("p"), total, PAGINA)
 
-    rows = todos
-    for key, _label, cumple in FILTROS:
-        if key == elegido:
-            rows = [r for r in todos if cumple(r, plazo)]
-            break
-    else:
-        elegido = ""
-
-    # Al buscar a quien escribirle, primero el que mas lleva esperando.
-    if elegido == "escribir":
-        rows = sorted(rows, key=lambda r: r["days"], reverse=True)
+    rows = clients.list_with_status(
+        term, claves=claves, plazo=plazo, pagina=pagina,
+        por_pagina=PAGINA if paginado else None,
+    )
 
     return render_template(
         "clients/list.html", rows=rows, term=term, grupos=grupos,
         elegido=elegido, plazo=plazo,
+        paginado=paginado, pagina=pagina, total=total,
+        paginas=max(1, -(-total // PAGINA)) if paginado else 1,
     )
+
+
+def _pagina(crudo, total, por_pagina):
+    """El numero de pagina que pidieron, acotado a las que existen.
+
+    Llega de la URL: una pagina 900 o un 'abc' no pueden dejar la
+    pantalla en blanco ni reventar.
+    """
+    try:
+        pedida = int(crudo)
+    except (TypeError, ValueError):
+        return 1
+    ultima = max(1, -(-total // por_pagina))
+    return min(max(1, pedida), ultima)
 
 
 @bp.get("/buscar")
@@ -64,17 +83,20 @@ def search_json():
     if not term:
         return {"rows": []}
 
-    endpoint = ("visits.create" if request.args.get("destino") == "visita"
-                else "clients.detail")
+    a_visita = request.args.get("destino") == "visita"
+    endpoint = "visits.create" if a_visita else "clients.detail"
+    # Se venia de un dia pasado: el resultado tiene que llevar esa fecha
+    # igual que los enlaces de la lista de abajo.
+    extra = {"dia": request.args.get("dia")} if a_visita else {}
 
     rows = []
     for row in clients.search(term, limit=8):
-        phone = row["phone_display"] or format_phone(row["phone"])
+        phone = format_phone(row["phone"]) or "sin tel\u00e9fono"
         pets = row["pet_names"]
         rows.append({
             "name": row["name"],
             "sub": f"{pets} \u00b7 {phone}" if pets else phone,
-            "url": url_for(endpoint, client_id=row["id"]),
+            "url": url_for(endpoint, client_id=row["id"], **extra),
         })
     return {"rows": rows}
 
