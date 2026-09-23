@@ -8,13 +8,21 @@
 {% endblock %}
 
 {% block content %}
-  <div class="contact">
-    <a class="btn btn-ghost" href="tel:{{ client.phone }}">
-      {{ client.phone_display or (client.phone | phone) }}
-    </a>
-    <a class="btn btn-ghost" href="https://wa.me/{{ client.phone[1:] }}"
-       target="_blank" rel="noopener">{{ icon('whatsapp', 18) }} WhatsApp</a>
-  </div>
+  {% if client.phone %}
+    <div class="contact">
+      <a class="btn btn-ghost" href="tel:{{ client.phone }}">
+        {{ client.phone_display or (client.phone | phone) }}
+      </a>
+      <a class="btn btn-ghost" href="https://wa.me/{{ client.phone[1:] }}"
+         target="_blank" rel="noopener">{{ icon('whatsapp', 18) }} WhatsApp</a>
+    </div>
+  {% else %}
+    {# Del cuaderno entran fichas sin número. Se dice cuál es el hueco y
+       se lleva directo a taparlo, en vez de dejar la fila muda. #}
+    <a class="btn btn-ghost btn-big falta-btn"
+       href="{{ url_for('clients.edit', client_id=client.id) }}">
+      Falta el teléfono · agregarlo</a>
+  {% endif %}
 
   <div class="tiles">
     <div class="tile tile-flat">
@@ -65,7 +73,9 @@
               {% if not pet.is_active %}<span class="tag">ya no asiste</span>{% endif %}
             </span>
             <span class="list-sub">
-              {{ pet.size | size }}{% if pet.breed %} · {{ pet.breed }}{% endif %}
+              {% if pet.size %}{{ pet.size | size }}
+              {%- else %}<span class="falta">falta el tamaño</span>{% endif %}
+              {%- if pet.breed %} · {{ pet.breed }}{% endif %}
             </span>
             {% if pet.temperament %}
               <span class="tag tag-warn">{{ pet.temperament }}</span>
@@ -84,7 +94,7 @@
 
           {% if pet.last_visit_date is not none
                 and pet.days_since_visit > follow_days
-                and pet.is_active %}
+                and pet.is_active and client.phone %}
             <a class="btn btn-sm btn-wa"
                href="https://wa.me/{{ client.phone[1:] }}"
                target="_blank" rel="noopener">{{ icon('whatsapp', 16) }} Escribirle</a>

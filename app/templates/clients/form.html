@@ -19,12 +19,16 @@
     {% if errors.name %}<em>{{ errors.name }}</em>{% endif %}
   </label>
 
+  {# Sin 'required': del cuaderno entran fichas sin número y hay que
+     poder editarles lo demás sin inventar uno. #}
   <label class="field {{ 'bad' if errors.phone }}">
     <span>Teléfono</span>
-    <input name="phone" type="tel" inputmode="tel" required
+    <input name="phone" type="tel" inputmode="tel"
            value="{{ client.phone_display or client.phone or '' }}"
            placeholder="6123-4567">
-    {% if errors.phone %}<em>{{ errors.phone }}</em>{% endif %}
+    {% if errors.phone %}<em>{{ errors.phone }}</em>
+    {% else %}<em class="ayuda">Sin él no se le puede escribir por WhatsApp.</em>
+    {% endif %}
   </label>
 
   <details class="more" {{ 'open' if errors.email or errors.document }}>

@@ -54,6 +54,12 @@ _STATUS_SQL = f"""
               FROM pet p3
              WHERE p3.client_id = c.id AND p3.deleted_at IS NULL
                AND p3.is_active = 1) AS sizes,
+           -- Lo que el cuaderno no traia. Se cuenta aqui para poder
+           -- filtrarlo sin abrir ficha por ficha.
+           (SELECT COUNT(*)
+              FROM pet p4
+             WHERE p4.client_id = c.id AND p4.deleted_at IS NULL
+               AND p4.is_active = 1 AND p4.size IS NULL) AS pets_sin_talla,
            MAX(lv.last_visit_date) AS last_visit_date,
            CAST(julianday({SQL_TODAY})
                 - julianday(MAX(lv.last_visit_date)) AS INTEGER) AS days

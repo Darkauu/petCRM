@@ -22,8 +22,14 @@
               {{ row.pet_names }} · última visita {{ row.last_visit_date | fecha }}
             </span>
           </a>
-          <a class="btn btn-sm btn-wa" href="https://wa.me/{{ row.phone[1:] }}"
-             target="_blank" rel="noopener">{{ icon('whatsapp', 16) }} Escribirle</a>
+          {% if row.phone %}
+            <a class="btn btn-sm btn-wa" href="https://wa.me/{{ row.phone[1:] }}"
+               target="_blank" rel="noopener">{{ icon('whatsapp', 16) }} Escribirle</a>
+          {% else %}
+            <a class="btn btn-sm btn-ghost"
+               href="{{ url_for('clients.edit', client_id=row.id) }}">
+              Falta el teléfono</a>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>

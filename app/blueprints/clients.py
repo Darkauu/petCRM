@@ -26,6 +26,10 @@ FILTROS = [
      lambda r, plazo: "medium" in (r["sizes"] or "")),
     ("grandes", "Perros grandes",
      lambda r, plazo: "large" in (r["sizes"] or "")),
+    # Despues de migrar el cuaderno hay fichas a medias. Sin una forma
+    # de listarlas, el hueco se descubre con el cliente enfrente.
+    ("incompletos", "Datos incompletos",
+     lambda r, plazo: not r["phone"] or r["pets_sin_talla"] > 0),
 ]
 
 
@@ -109,7 +113,7 @@ def create():
         return render_template("clients/form.html", client={}, errors={})
 
     data, errors = clean_client(request.form)
-    if not errors:
+    if not errors and data["phone"]:
         existing = clients.find_by_phone(data["phone"])
         if existing:
             errors["phone"] = (
@@ -142,7 +146,7 @@ def edit(client_id):
         return render_template("clients/form.html", client=client, errors={})
 
     data, errors = clean_client(request.form)
-    if not errors:
+    if not errors and data["phone"]:
         existing = clients.find_by_phone(data["phone"])
         if existing and existing["id"] != client_id:
             errors["phone"] = f"Ese telefono ya es de {existing['name']}."

@@ -89,14 +89,23 @@ def run_flow(db_path):
                     data={"name": "Luna", "size": "large", "and_another": "1"})
     check("'guardar y agregar otra' regresa al formulario",
           r.status_code == 302 and "/mascotas/nueva" in r.headers["Location"])
+    # Una mascota sin talla SI se guarda: del cuaderno entran asi, y
+    # una talla inventada cobra mal el proximo bano. El hueco tiene
+    # que quedar a la vista, que es lo que se comprueba abajo.
     r = client.post("/clientes/1/mascotas/nueva", data={"name": "SinTalla"})
-    check("no se guarda una mascota sin tamanio",
-          r.status_code == 400)
+    check("una mascota sin tamanio se guarda igual", r.status_code == 302,
+          r.get_data(as_text=True)[:200])
+    body = client.get("/clientes/1").get_data(as_text=True)
+    check("pero el hueco queda escrito en la ficha",
+          "falta el tama" in body.lower())
+    check("y una talla inventada sigue sin colarse",
+          client.post("/clientes/1/mascotas/nueva",
+                      data={"name": "X", "size": "gigante"}).status_code == 400)
 
     body = client.get("/clientes/1").get_data(as_text=True)
     check("la ficha lista las dos mascotas", "Toby" in body and "Luna" in body)
     check("la ficha avisa que no hay visitas registradas",
-          body.count("Sin visitas registradas") == 2)
+          body.count("Sin visitas registradas") == 3)
     check("la ficha muestra el manejo del perro", "muerde al secar" in body)
 
     print("\nPanel de clientes: a quien escribirle, sin entrar a nadie")
@@ -175,7 +184,7 @@ def run_flow(db_path):
 
     body = client.get("/clientes/1").get_data(as_text=True)
     check("una visita pendiente no cuenta como ultima visita de la mascota",
-          body.count("Sin visitas registradas") == 2)
+          body.count("Sin visitas registradas") == 3)
 
     body = client.get("/visitas/nueva/1").get_data(as_text=True)
     check("y tampoco sirve de referencia de precio: sale el de lista",
@@ -273,7 +282,7 @@ def run_flow(db_path):
     check("el dia vuelve a cero", "$0.00" in body)
     body = client.get("/clientes/1").get_data(as_text=True)
     check("la visita eliminada deja de contar para el marcador",
-          body.count("Sin visitas registradas") == 2)
+          body.count("Sin visitas registradas") == 3)
 
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
@@ -725,7 +734,10 @@ def run_auto_migrate(_unused):
     client = sign_in(app.test_client())
 
     conn = sqlite3.connect(db)
-    check("la version sube sola", conn.execute("PRAGMA user_version").fetchone()[0] == 3)
+    from app.schema import expected_version
+    ultima = expected_version(str(BASE_DIR / "migrations"))
+    check("la version sube sola",
+          conn.execute("PRAGMA user_version").fetchone()[0] == ultima, ultima)
     check("el cliente sigue ahi",
           conn.execute("SELECT name FROM client").fetchone()[0] == "Marta")
     check("la visita historica se conserva con su estado",
@@ -1203,6 +1215,218 @@ def run_stats(db_path):
           "Esta semana" in body)
 
 
+CUADERNO = """\
+Fecha,Cliente,Tel\u00e9fono,Mascota,Tama\u00f1o,Raza,Servicio,Precio,Notas
+2026-07-03,Ana Vega,6123-4567,Rocky,mediano,Schnauzer,Ba\u00f1o,18.00,
+14/07/2026,Marta R\u00edos,6555-1122,Toby,peque\u00f1o,,Ba\u00f1o,15.00,
+2026-07-21,ana vega,61234567,Rocky,,,Ba\u00f1o,18.00,vino nerviosa
+2026-08-02,Don Pedro,,Coco,,Poodle,Ba\u00f1o,15.00,el del kiosko
+2026-08-11,Marta Rios,6555-1122,Luna,grande,Labrador,Ba\u00f1o,25.00,
+2026-08-15,Sra. Lidia,999,Pelusa,enorme,,Ba\u00f1o,15,
+,Nadie,6111-2222,Fantasma,peque\u00f1o,,Ba\u00f1o,15.00,sin fecha
+2099-01-01,Del Futuro,6111-3333,Cronos,peque\u00f1o,,Ba\u00f1o,15.00,
+2026-08-30,Precio Malo,6111-4444,Roto,peque\u00f1o,,Ba\u00f1o,quince d\u00f3lares,
+"""
+
+
+def run_import(_unused):
+    """scripts/import_csv.py: pasar el cuaderno de papel al sistema."""
+    import subprocess
+
+    work = tempfile.mkdtemp()
+    db = os.path.join(work, "petcrm.db")
+    csv_path = os.path.join(work, "cuaderno.csv")
+    pathlib.Path(csv_path).write_text(CUADERNO, encoding="utf-8")
+    entorno = dict(os.environ, DB_PATH=db, AUTO_BACKUP="0")
+
+    def importar(*extra):
+        return subprocess.run(
+            [sys.executable, str(BASE_DIR / "scripts" / "import_csv.py"),
+             csv_path, *extra],
+            cwd=str(BASE_DIR), env=entorno, capture_output=True, text=True)
+
+    subprocess.run([sys.executable, str(BASE_DIR / "scripts" / "init_db.py")],
+                   cwd=str(BASE_DIR), env=entorno, capture_output=True)
+
+    print("\nMigrar el cuaderno de papel")
+
+    r = importar()
+    check("por defecto solo informa, no escribe",
+          r.returncode == 0 and "No se escribio nada" in r.stdout, r.stderr[-400:])
+    conn = sqlite3.connect(db)
+    check("y la base sigue vacia de verdad",
+          conn.execute("SELECT COUNT(*) FROM client").fetchone()[0] == 0)
+    conn.close()
+
+    check("cuenta lo que entra y lo que no",
+          "se pueden importar: 6" in r.stdout and "no se pueden leer:  3" in r.stdout,
+          r.stdout[:600])
+    check("dice cual renglon no se pudo leer y por que",
+          "falta fecha" in r.stdout and "futuro" in r.stdout
+          and "quince d" in r.stdout, r.stdout[-900:])
+    check("y deja los ilegibles en un CSV para corregirlos",
+          os.path.exists(os.path.join(work, "cuaderno-rechazados.csv")))
+
+    # El precio de lista se deduce por talla, que es como cobra una
+    # peluqueria: el mismo bano vale distinto segun el perro.
+    check("propone el precio de lista que dice el papel, por talla",
+          "$15.00" in r.stdout and "$18.00" in r.stdout and "$25.00" in r.stdout,
+          r.stdout[:900])
+
+    r = importar("--commit")
+    check("con --commit si escribe", r.returncode == 0, r.stderr[-400:])
+    check("y saca un respaldo antes de tocar nada",
+          "antes-de-importar" in r.stdout)
+
+    conn = sqlite3.connect(db)
+    conn.row_factory = sqlite3.Row
+    cuenta = lambda t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+
+    # 'Ana Vega' y 'ana vega' son la misma persona: el telefono manda.
+    # 'Ana Vega' + 'ana vega' y 'Marta Rios' + 'Marta Rios' se juntan
+    # por telefono; Don Pedro y Sra. Lidia entran por nombre.
+    check("el mismo cliente escrito de dos formas entra una sola vez",
+          cuenta("client") == 4, cuenta("client"))
+    check("las mascotas quedan colgadas de su duenio",
+          cuenta("pet") == 5, cuenta("pet"))
+    check("y cada dia del cuaderno es una visita",
+          cuenta("visit") == 6, cuenta("visit"))
+
+    # Lo que el cuaderno no traia entra vacio, no inventado.
+    check("un cliente sin telefono entra sin telefono",
+          conn.execute("SELECT COUNT(*) FROM client WHERE phone IS NULL")
+              .fetchone()[0] == 2)
+    check("un telefono ilegible no se guarda a medias",
+          conn.execute("SELECT phone FROM client WHERE name = 'Sra. Lidia'")
+              .fetchone()[0] is None)
+    check("una mascota sin talla entra sin talla",
+          conn.execute("SELECT COUNT(*) FROM pet WHERE size IS NULL")
+              .fetchone()[0] == 2)
+    check("pero una talla que si venia se conserva",
+          conn.execute("SELECT size FROM pet WHERE name = 'Rocky'")
+              .fetchone()[0] == "medium")
+
+    # El precio del papel se congela en la linea, como cualquier visita.
+    check("cada linea guarda el precio que decia el papel",
+          sorted(r[0] for r in conn.execute(
+              "SELECT price_cents FROM visit_service")) ==
+          [1500, 1500, 1500, 1800, 1800, 2500])
+    # 'any' junto a las de talla no puede quedar: la pantalla de
+    # servicios decide el modo por su ausencia, y al guardar borraria
+    # las de talla sin avisar.
+    check("y el catalogo queda con una fila por talla, sin un 'any' encima",
+          sorted((r["size"], r["price_cents"]) for r in conn.execute(
+              "SELECT size, price_cents FROM service_price")) ==
+          [("large", 2500), ("medium", 1800), ("small", 1500)],
+          [tuple(r) for r in conn.execute(
+              "SELECT size, price_cents FROM service_price")])
+
+    # Esto es lo que hace util el import: el panel de 'a quien escribirle'
+    # funciona desde el primer dia, sin esperar un mes de visitas nuevas.
+    check("el marcador de ultima visita queda sembrado",
+          conn.execute("SELECT COUNT(*) FROM v_pet_last_visit "
+                       "WHERE last_visit_date IS NOT NULL").fetchone()[0] == 5)
+
+    # Historia, no trabajo del sistema: no puede contarse como tal.
+    check("las visitas importadas quedan marcadas como historia",
+          conn.execute("SELECT COUNT(*) FROM visit WHERE source = 'import'")
+              .fetchone()[0] == 6)
+    conn.close()
+
+    print("\nVolver a pasar el mismo cuaderno")
+    r = importar("--commit")
+    conn = sqlite3.connect(db)
+    check("no duplica ni un cliente", cuenta("client") == 4)
+    check("ni una visita", cuenta("visit") == 6)
+    check("ni una linea", cuenta("visit_service") == 6)
+    conn.close()
+    check("y lo dice", "0 clientes" in r.stdout and "0 visitas" in r.stdout)
+
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    app = create_app(Cfg)
+    client = sign_in(app.test_client())
+
+    print("\nEl catalogo importado se puede seguir editando")
+
+    body = client.get("/servicios/").get_data(as_text=True)
+    check("la lista muestra los tres precios, no uno solo",
+          "$15.00" in body and "$18.00" in body and "$25.00" in body, body[-900:])
+
+    body = client.get("/servicios/1/editar").get_data(as_text=True)
+    # 'Por tamanio' se elige por la AUSENCIA de un precio 'any'. Si el
+    # import hubiera dejado los dos, esta pantalla abriria en 'Uno solo'
+    # y el primer guardado borraria la tabla por talla.
+    check("el formulario abre en 'por tamanio', que es como entro",
+          'data-price-block="size" hidden' not in body
+          and 'data-price-block="any" hidden' in body,
+          body[body.find("data-price-block"):][:300])
+    check("y trae los tres precios listos para corregir",
+          'value="15.00"' in body and 'value="18.00"' in body
+          and 'value="25.00"' in body)
+
+    print("\nCobrarle a un perro que entro sin talla")
+
+    conn = sqlite3.connect(db)
+    coco = conn.execute(
+        "SELECT id, client_id FROM pet WHERE size IS NULL LIMIT 1").fetchone()
+    conn.close()
+
+    # Lo que decia el papel la ultima vez es mejor referencia que
+    # cualquier precio de lista: es lo que se le cobro a ESE perro.
+    body = client.get(f"/visitas/nueva/{coco[1]}").get_data(as_text=True)
+    check("el precio que decia el cuaderno queda de referencia",
+          "\u00faltimo cobro" in body and 'value="15.00"' in body, body[:400])
+
+    # Una mascota nueva sin talla no tiene ni historia ni precio de
+    # lista al cual caer: la pantalla lo dice en vez de poner un numero.
+    client.post(f"/clientes/{coco[1]}/mascotas/nueva", data={"name": "Nuevo"})
+    body = client.get(f"/visitas/nueva/{coco[1]}").get_data(as_text=True)
+    check("y sin historia ni talla, no se inventa ninguno",
+          "sin precio de lista" in body, body[-1500:])
+
+    r = client.post(f"/visitas/nueva/{coco[1]}",
+                    data={"pet": [str(coco[0])], "pick": [f"{coco[0]}:1"],
+                          f"price_{coco[0]}_1": "15"})
+    check("se le cobra igual, escribiendo el monto a mano",
+          r.status_code == 302, r.get_data(as_text=True)[:300])
+
+    print("\nEl hueco se ve en la aplicacion")
+
+    body = client.get("/clientes/").get_data(as_text=True)
+    check("el panel dice quien no tiene telefono", "sin tel" in body.lower())
+    check("y ofrece filtrar lo que quedo incompleto",
+          "Datos incompletos" in body, body[:900])
+
+    body = client.get("/clientes/?f=incompletos").get_data(as_text=True)
+    check("el filtro deja solo a los que les falta algo",
+          "Don Pedro" in body and "Sra. Lidia" in body
+          and "Ana Vega" not in body, body[-1200:])
+
+    conn = sqlite3.connect(db)
+    sin_tel = conn.execute(
+        "SELECT id FROM client WHERE phone IS NULL LIMIT 1").fetchone()[0]
+    conn.close()
+    body = client.get(f"/clientes/{sin_tel}").get_data(as_text=True)
+    check("la ficha sin telefono no ofrece un WhatsApp roto",
+          "wa.me/None" not in body and "wa.me/" not in body, body[:700])
+    check("dice cual es el hueco y lleva a taparlo",
+          "Falta el tel" in body)
+
+    # Y taparlo tiene que funcionar: es el flujo de despues de importar.
+    r = client.post(f"/clientes/{sin_tel}/editar",
+                    data={"name": "Don Pedro", "phone": "6777-8899"})
+    check("se le puede agregar el telefono que faltaba", r.status_code == 302,
+          r.get_data(as_text=True)[:300])
+    body = client.get(f"/clientes/{sin_tel}").get_data(as_text=True)
+    check("y entonces si aparece el boton de WhatsApp",
+          "wa.me/50767778899" in body)
+
+
 def short_date_of(app, iso, weekday=False):
     with app.app_context():
         from app.labels import short_date
@@ -1218,7 +1442,7 @@ def shift_of(app, iso, days):
 if __name__ == "__main__":
     for runner in (run_flow, run_csrf, run_stats, run_interface,
                    run_schema_guard, run_auto_migrate, run_auth,
-                   run_backups, run_seed):
+                   run_backups, run_seed, run_import):
         path = fresh_db()
         try:
             runner(path)

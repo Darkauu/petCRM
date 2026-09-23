@@ -755,3 +755,11 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.75rem 0 0; }
 @media (min-width: 900px) {
   .tabbar .tab-end { margin-top: auto; }
 }
+
+/* ---- Huecos que dejo el cuaderno -------------------------------------
+   Un dato que falta se ve como lo que es: ni escondido, ni disfrazado
+   de error. Tapa el hueco quien puede, cuando puede. */
+
+.falta { color: var(--warn); font-weight: 600; }
+.falta-btn { color: var(--warn); border-color: var(--warn); }
+.ayuda { color: var(--muted); font-size: .8125rem; font-style: normal; }

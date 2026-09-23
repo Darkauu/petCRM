@@ -40,11 +40,16 @@ def clean_client(form):
     if not data["name"]:
         errors["name"] = "El nombre es obligatorio."
 
-    try:
-        e164, display = normalize_phone(form.get("phone"))
-        data["phone"], data["phone_display"] = e164, display
-    except PhoneError as exc:
-        errors["phone"] = str(exc)
+    # Sin telefono se puede guardar: hay fichas que entraron del
+    # cuaderno sin numero, y obligar a poner uno para editar el resto
+    # de la ficha termina en un numero inventado. Lo que no se acepta
+    # es un numero escrito mal, que es peor que ninguno.
+    if (form.get("phone") or "").strip():
+        try:
+            e164, display = normalize_phone(form.get("phone"))
+            data["phone"], data["phone_display"] = e164, display
+        except PhoneError as exc:
+            errors["phone"] = str(exc)
 
     if data["email"] and not _EMAIL_RE.match(data["email"]):
         errors["email"] = "Correo inválido."
@@ -71,7 +76,11 @@ def clean_pet(form, client_id):
     if not data["name"]:
         errors["name"] = "El nombre es obligatorio."
 
-    if data["size"] not in SIZE_KEYS:
+    # Una talla vacia es un hueco visible; una inventada cobra mal el
+    # proximo bano y nadie se entera.
+    if not data["size"]:
+        data["size"] = None
+    elif data["size"] not in SIZE_KEYS:
         errors["size"] = "Elige el tamaño."
 
     if data["species"] not in SPECIES_KEYS:
