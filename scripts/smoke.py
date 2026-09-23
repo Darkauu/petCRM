@@ -98,6 +98,31 @@ def run_flow(db_path):
           body.count("Sin visitas registradas") == 2)
     check("la ficha muestra el manejo del perro", "muerde al secar" in body)
 
+    print("\nPanel de clientes: a quien escribirle, sin entrar a nadie")
+    body = client.get("/clientes/").get_data(as_text=True)
+    check("las pestanias de filtro estan",
+          "Por escribir" in body and "Sin visitas" in body
+          and "Perros grandes" in body)
+    check("y cada una trae su numero", 'class="chip-n"' in body)
+
+    # Toby vino hace 20 dias (insertado mas abajo no; aqui aun no hay
+    # visitas), asi que de momento todos caen en "sin visitas".
+    grupos = {
+        "": client.get("/clientes/").get_data(as_text=True),
+        "sin-visitas": client.get("/clientes/?f=sin-visitas").get_data(as_text=True),
+        "pequenos": client.get("/clientes/?f=pequenos").get_data(as_text=True),
+        "grandes": client.get("/clientes/?f=grandes").get_data(as_text=True),
+    }
+    check("sin visitas: sale Marta, que no tiene ninguna",
+          "Marta Rios" in grupos["sin-visitas"])
+    check("perros pequenios: Toby es pequenio, asi que sale su duenia",
+          "Marta Rios" in grupos["pequenos"])
+    check("perros grandes: Luna es grande, tambien sale",
+          "Marta Rios" in grupos["grandes"])
+    check("un filtro inventado no rompe: cae a todos",
+          "Marta Rios" in
+          client.get("/clientes/?f=inventado").get_data(as_text=True))
+
     print("\nBusqueda")
     check("por nombre de mascota",
           "Marta Rios" in client.get("/clientes/?q=toby").get_data(as_text=True))
@@ -264,6 +289,15 @@ def run_flow(db_path):
     body = client.get("/clientes/1").get_data(as_text=True)
     check("cuenta los dias desde la ultima visita", "Hace 20" in body)
     check("ofrece escribirle al pasarse del plazo", "Escribirle" in body)
+    check("y la ficha dice cuanto ha dejado en total",
+          "cobrado en total" in body and "Cliente desde" in body)
+
+    # Lo que pidio el duenio: verlo desde el panel, sin entrar a nadie.
+    lista = client.get("/clientes/?f=escribir").get_data(as_text=True)
+    check("el panel de clientes ya trae el boton de WhatsApp",
+          "wa.me" in lista and "Escribirle" in lista)
+    check("y solo para quien se paso del plazo",
+          lista.count("btn-wa") == 1, lista.count("btn-wa"))
     check("la mascota sin visitas sigue marcada como hueco",
           "Sin visitas registradas" in body)
 
