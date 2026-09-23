@@ -15,6 +15,13 @@
   --ok:        #0f766e;
   --ok-bg:     #e7f4f2;
   --accent-soft: #e2f0ee;
+  /* La accion principal NO puede ser del color de la pantalla. Con la
+     barra, las pestanias y el boton todos en el verde de la marca, el
+     boton deja de leerse como un boton y se vuelve fondo. El indigo no
+     significa nada mas aqui: el naranja ya es 'pendiente' y el rojo
+     'peligro'. */
+  --cta:       #4f46e5;
+  --cta-ink:   #ffffff;
   --on-accent-soft: rgba(255, 255, 255, .2);
   --on-accent-line: rgba(255, 255, 255, .38);
   --radius:    12px;
@@ -39,6 +46,8 @@
     --ok:      #2dd4bf;
     --ok-bg:   #12312e;
     --accent-soft: #10312e;
+    --cta:     #a5b4fc;
+    --cta-ink: #1e1b4b;
     --on-accent-soft: rgba(0, 0, 0, .14);
     --on-accent-line: rgba(0, 0, 0, .28);
   }
@@ -58,6 +67,8 @@
     --ok:      #2dd4bf;
     --ok-bg:   #12312e;
     --accent-soft: #10312e;
+    --cta:     #a5b4fc;
+    --cta-ink: #1e1b4b;
     --on-accent-soft: rgba(0, 0, 0, .14);
     --on-accent-line: rgba(0, 0, 0, .28);
 }
@@ -291,6 +302,10 @@ body {
 .btn-big { width: 100%; }
 .btn-sm { min-height: 2.25rem; padding: 0 .875rem; font-size: .875rem; }
 .btn-ghost { background: var(--surface); color: var(--accent); border-color: var(--border); }
+/* La accion principal de la pantalla, en un color que no es el de la
+   pantalla. Es la unica que lo lleva: si hubiera tres, no resaltaria
+   ninguna. */
+.btn-cta { background: var(--cta); color: var(--cta-ink); border-color: var(--cta); }
 .btn-danger { color: var(--danger); }
 .btn-wa { flex-shrink: 0; }
 
@@ -826,3 +841,23 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.75rem 0 0; }
   min-height: var(--tap); color: var(--accent);
   text-decoration: none; font-weight: 600;
 }
+
+/* ---- Paginacion ------------------------------------------------------
+   Con trescientos clientes, la lista entera es medio megabyte de HTML
+   en un celular que ya venia lento. Va de a diez, y el numero del medio
+   dice por cual se va para que 'siguiente' no sea un salto a ciegas. */
+
+.pager {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; margin-top: 1rem;
+}
+.pager-txt {
+  font-size: .8125rem; color: var(--muted); text-align: center;
+  flex: 1 1 auto;
+}
+/* .btn-sm mide 36px, y estos se tocan con el pulgar tantas veces como
+   paginas haya: van al tamanio tactil completo como todo lo demas. */
+.pager .btn { min-height: var(--tap); }
+/* El extremo se queda en su sitio en vez de desaparecer: si el boton se
+   quitara, los otros dos saltarian de lugar al cambiar de pagina. */
+.pager .is-off { opacity: .35; pointer-events: none; }

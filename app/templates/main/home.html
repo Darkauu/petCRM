@@ -4,7 +4,7 @@
 {% block heading %}{{ biz_name or 'Inicio' }}{% endblock %}
 
 {% block content %}
-  <a class="btn btn-big btn-hero"
+  <a class="btn btn-big btn-hero btn-cta"
      href="{{ url_for('visits.pick_client') }}">Registrar visita</a>
 
   <a class="tiles tiles-link" href="{{ url_for('visits.index') }}">
@@ -52,7 +52,7 @@
      para saber cual lleva mas rato adentro. #}
   <hr>
 
-  <h2 class="section">Pendientes de cobro</h2>
+  <h2 class="section" id="pendientes">Pendientes de cobro</h2>
 
   {% if pending_rows %}
     {% if pending_stale %}
@@ -61,7 +61,7 @@
         {{ pending.oldest | fecha(true) }}.
       </p>
     {% endif %}
-    <ul class="list">
+    <ul class="list" data-keep-scroll>
       {% for row in pending_rows %}{{ visit_row(row, 'home', row.visit_date != hoy) }}{% endfor %}
     </ul>
   {% else %}

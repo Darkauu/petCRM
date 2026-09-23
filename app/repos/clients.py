@@ -70,21 +70,20 @@ _STATUS_SQL = f"""
     WHERE c.deleted_at IS NULL
       {{extra}}
     GROUP BY c.id
-    ORDER BY c.name COLLATE NOCASE
 """
 
+# Cuantos clientes se traen de una. Con trescientos en la base, pintar
+# la lista entera es medio megabyte de HTML en un celular que ya venia
+# lento; lo que se busca casi siempre esta en la primera pagina o se
+# encuentra escribiendo el nombre.
+PAGINA = 10
 
-def list_with_status(term=None):
-    """Todos los clientes con su estado. El filtro se aplica despues.
 
-    El termino de busqueda si va en SQL; el filtro por estado no, porque
-    depende de un plazo que el duenio cambia y porque asi se pueden
-    contar todos los grupos de una sola pasada, sin una consulta por
-    cada pestania.
-    """
+def _busqueda(term):
+    """(sql, params) del termino de busqueda. Vacio si no hay termino."""
     term = (term or "").strip()
     if not term:
-        return query_all(_STATUS_SQL.format(extra=""))
+        return "", []
 
     like = f"%{term}%"
     digits = re.sub(r"\D", "", term)
@@ -92,13 +91,94 @@ def list_with_status(term=None):
     extra = """
       AND (c.name LIKE ? COLLATE NOCASE
            OR (? IS NOT NULL AND c.phone LIKE ?)
-           OR EXISTS (SELECT 1 FROM pet p4
-                      WHERE p4.client_id = c.id
-                        AND p4.deleted_at IS NULL
-                        AND p4.name LIKE ? COLLATE NOCASE))
+           OR EXISTS (SELECT 1 FROM pet p5
+                      WHERE p5.client_id = c.id
+                        AND p5.deleted_at IS NULL
+                        AND p5.name LIKE ? COLLATE NOCASE))
     """
-    return query_all(_STATUS_SQL.format(extra=extra),
-                     (like, phone_like, phone_like, like))
+    return extra, [like, phone_like, phone_like, like]
+
+
+def _envoltura(term):
+    """La consulta de estado lista para filtrarse por sus columnas.
+
+    El filtro por grupo mira 'days' y 'sizes', que son columnas
+    calculadas: no existen todavia en el WHERE de adentro. Por eso la
+    consulta se envuelve, y el filtro va afuera.
+    """
+    extra, params = _busqueda(term)
+    return f"SELECT * FROM ({_STATUS_SQL.format(extra=extra)})", params
+
+
+def list_with_status(term=None, claves=(), plazo=15, pagina=1, por_pagina=PAGINA):
+    """Una pagina de clientes con su estado, ya filtrada en la base.
+
+    'claves' son grupos de app/segments.py, y el usuario solo elige
+    cuales: la condicion la pone el servidor.
+
+    por_pagina=None trae todo, para cuando de verdad hace falta la
+    lista completa (los envios, por ejemplo, que necesitan a todos los
+    destinatarios, no a los diez primeros).
+    """
+    from app import segments
+
+    base, params = _envoltura(term)
+    cond, cond_params = segments.condicion(claves, plazo)
+    if cond:
+        base += f" WHERE {cond}"
+        params = params + cond_params
+
+    # Quien busca a quien escribirle quiere primero al que mas lleva
+    # esperando; quien solo mira la lista, el orden alfabetico.
+    if "escribir" in claves:
+        base += " ORDER BY days DESC, name COLLATE NOCASE"
+    else:
+        base += " ORDER BY name COLLATE NOCASE"
+
+    if por_pagina is None:
+        return query_all(base, tuple(params))
+
+    pagina = max(1, int(pagina or 1))
+    return query_all(base + " LIMIT ? OFFSET ?",
+                     tuple(params) + (por_pagina, (pagina - 1) * por_pagina))
+
+
+def count_with_status(term=None, claves=(), plazo=15):
+    """Cuantos hay en total con ese termino y esos grupos."""
+    from app import segments
+
+    base, params = _envoltura(term)
+    cond, cond_params = segments.condicion(claves, plazo)
+    if cond:
+        base += f" WHERE {cond}"
+        params = params + cond_params
+    row = query_one(f"SELECT COUNT(*) AS n FROM ({base})", tuple(params))
+    return row["n"] if row else 0
+
+
+def group_counts(term, grupos, plazo):
+    """El numero de cada pestania, en UNA sola consulta.
+
+    Es la razon de que los criterios sean SQL y no funciones de Python:
+    asi el panel no tiene que traerse la tabla entera para contar.
+    """
+    from app import segments
+
+    base, params = _envoltura(term)
+    piezas, todos_params = ["COUNT(*) AS total"], []
+    for i, (clave, _etiqueta, _cond) in enumerate(grupos):
+        cond, cond_params = segments.condicion([clave], plazo)
+        piezas.append(f"SUM(CASE WHEN {cond} THEN 1 ELSE 0 END) AS g{i}")
+        todos_params.extend(cond_params)
+
+    row = query_one(f"SELECT {', '.join(piezas)} FROM ({base})",
+                    tuple(todos_params) + tuple(params))
+    if row is None:
+        return {"": 0}
+    out = {"": row["total"] or 0}
+    for i, (clave, _etiqueta, _cond) in enumerate(grupos):
+        out[clave] = row[f"g{i}"] or 0
+    return out
 
 
 def lifetime(client_id):

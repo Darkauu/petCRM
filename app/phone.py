@@ -12,8 +12,28 @@ class PhoneError(ValueError):
     pass
 
 
+def format_phone(e164, country_code=COUNTRY_CODE):
+    """'+50761234567' -> '6123-4567'"""
+    if not e164:
+        return ""
+    digits = e164.lstrip("+")
+    if digits.startswith(country_code):
+        digits = digits[len(country_code):]
+    if len(digits) == 8:
+        return f"{digits[:4]}-{digits[4:]}"
+    if len(digits) == 7:
+        return f"{digits[:3]}-{digits[3:]}"
+    return digits
+
+
 def normalize_phone(text, country_code=COUNTRY_CODE):
-    """Devuelve (e164, display). '6123-4567' -> ('+50761234567', '6123-4567')"""
+    """Devuelve (e164, display) ya en formato de la casa.
+
+    '61234567', '+507 6123 4567' y '6123-4567' son el mismo numero y
+    se guardan y se ven igual: 6123-4567. Antes se conservaba lo que
+    cada quien habia tecleado, y la misma lista mostraba tres formas
+    distintas del mismo tipo de numero.
+    """
     if text is None or not str(text).strip():
         raise PhoneError("El telefono es obligatorio.")
 
@@ -35,21 +55,8 @@ def normalize_phone(text, country_code=COUNTRY_CODE):
             "Se espera 8 digitos para movil (6XXXXXXX) o 7 para fijo."
         )
 
-    return f"+{country_code}{digits}", display
-
-
-def format_phone(e164, country_code=COUNTRY_CODE):
-    """'+50761234567' -> '6123-4567'"""
-    if not e164:
-        return ""
-    digits = e164.lstrip("+")
-    if digits.startswith(country_code):
-        digits = digits[len(country_code):]
-    if len(digits) == 8:
-        return f"{digits[:4]}-{digits[4:]}"
-    if len(digits) == 7:
-        return f"{digits[:3]}-{digits[3:]}"
-    return digits
+    e164 = f"+{country_code}{digits}"
+    return e164, format_phone(e164, country_code)
 
 
 def init_app(app):

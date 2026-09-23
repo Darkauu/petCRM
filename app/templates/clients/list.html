@@ -46,10 +46,12 @@
   {# Con un grupo elegido, el paso siguiente natural es escribirles a
      todos. El filtro viaja con el enlace para no volver a elegirlo. #}
   {% if elegido and elegido != 'incompletos' and rows %}
+    {# 'total', no las filas de la pantalla: con la paginación la
+       pantalla muestra diez y el grupo puede tener cuarenta. #}
     <a class="btn btn-ghost btn-big btn-wa-big"
        href="{{ url_for('outreach.create', g=elegido) }}">
       {{ icon('whatsapp', 18) }}
-      Escribirle a {{ 'este' if rows | length == 1 else 'los ' ~ (rows | length) }}
+      Escribirle a {{ 'este' if total == 1 else 'los ' ~ total }}
     </a>
   {% endif %}
 
@@ -62,7 +64,7 @@
             <span class="list-title">{{ row.name }}</span>
             <span class="list-sub">
               {{ row.pet_names or 'sin mascotas' }}
-              · {% if row.phone %}{{ row.phone_display or (row.phone | phone) }}
+              · {% if row.phone %}{{ row.phone | phone }}
                 {%- else %}<span class="falta">sin teléfono</span>{% endif %}
             </span>
             {% if row.last_visit_date is none %}
@@ -94,6 +96,35 @@
         </li>
       {% endfor %}
     </ul>
+
+    {% if paginado and paginas > 1 %}
+      {# Cuántos son y por cuál va: sin el total, "siguiente" es un
+         salto a ciegas. #}
+      <nav class="pager" aria-label="Páginas de clientes">
+        {% if pagina > 1 %}
+          <a class="btn btn-ghost btn-sm"
+             href="{{ url_for('clients.index', f=elegido or none, p=pagina - 1 if pagina > 2 else none) }}"
+             rel="prev">{{ icon('anterior', 16) }} Anterior</a>
+        {% else %}
+          <span class="btn btn-ghost btn-sm is-off" aria-hidden="true">
+            {{ icon('anterior', 16) }} Anterior</span>
+        {% endif %}
+
+        <span class="pager-txt">
+          {{ pagina }} de {{ paginas }} · {{ total }}
+          {{ 'cliente' if total == 1 else 'clientes' }}
+        </span>
+
+        {% if pagina < paginas %}
+          <a class="btn btn-ghost btn-sm"
+             href="{{ url_for('clients.index', f=elegido or none, p=pagina + 1) }}"
+             rel="next">Siguiente {{ icon('siguiente', 16) }}</a>
+        {% else %}
+          <span class="btn btn-ghost btn-sm is-off" aria-hidden="true">
+            Siguiente {{ icon('siguiente', 16) }}</span>
+        {% endif %}
+      </nav>
+    {% endif %}
 
   {% elif term %}
     <div class="empty">

@@ -30,13 +30,42 @@ _CANDIDATOS_SQL = f"""
       AND c.phone IS NOT NULL
       AND COALESCE(c.preferred_channel, 'whatsapp') <> 'none'
     GROUP BY c.id
-    ORDER BY days DESC, c.name COLLATE NOCASE
 """
 
 
-def candidates():
-    """Todos los que se pueden contactar, del mas atrasado al menos."""
-    return query_all(_CANDIDATOS_SQL)
+def candidates(claves=(), plazo=15):
+    """Los que se pueden contactar, del mas atrasado al menos.
+
+    Aqui SI se traen todos los que cumplen: son los destinatarios del
+    envio, y mandarle a diez de cuarenta porque la pantalla pagina
+    seria un error silencioso.
+    """
+    from app import segments
+
+    base = f"SELECT * FROM ({_CANDIDATOS_SQL})"
+    cond, params = segments.condicion(claves, plazo)
+    if cond:
+        base += f" WHERE {cond}"
+    return query_all(base + " ORDER BY days DESC, name COLLATE NOCASE",
+                     tuple(params))
+
+
+def candidate_counts(grupos, plazo):
+    """El numero de cada pestania, en una sola consulta."""
+    from app import segments
+
+    piezas, params = ["COUNT(*) AS total"], []
+    for i, (clave, _etiqueta, _cond) in enumerate(grupos):
+        cond, cond_params = segments.condicion([clave], plazo)
+        piezas.append(f"SUM(CASE WHEN {cond} THEN 1 ELSE 0 END) AS g{i}")
+        params.extend(cond_params)
+
+    row = query_one(
+        f"SELECT {', '.join(piezas)} FROM ({_CANDIDATOS_SQL})", tuple(params))
+    if row is None:
+        return {}
+    return {clave: (row[f"g{i}"] or 0)
+            for i, (clave, _e, _c) in enumerate(grupos)}
 
 
 def create(name, message, client_ids):

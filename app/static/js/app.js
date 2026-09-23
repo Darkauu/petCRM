@@ -295,3 +295,38 @@ document.querySelectorAll("form.form").forEach(function (form) {
     });
   });
 })();
+
+
+// ---- Cobrar sin perder el sitio ----------------------------------------
+// Cobrar es un POST y un redirect, asi que la pagina se repinta desde
+// arriba. Con la lista de pendientes abajo del todo, cada cobro obligaba
+// a bajar otra vez. Se guarda donde estaba la pantalla y se vuelve ahi.
+//
+// El ancla del redirect (#pendientes) hace lo mismo a grandes rasgos sin
+// JS; esto solo lo afina al pixel.
+(function () {
+  var CLAVE = "scroll-inicio";
+
+  document.querySelectorAll("[data-keep-scroll] form").forEach(function (form) {
+    form.addEventListener("submit", function () {
+      try {
+        sessionStorage.setItem(CLAVE, String(window.scrollY));
+      } catch (e) { /* navegacion privada: se queda con el ancla */ }
+    });
+  });
+
+  if (!document.querySelector("[data-keep-scroll]")) return;
+
+  var guardado = null;
+  try {
+    guardado = sessionStorage.getItem(CLAVE);
+    sessionStorage.removeItem(CLAVE);
+  } catch (e) { return; }
+
+  if (guardado === null) return;
+  // Despues del salto del ancla, que ocurre al cargar: si se hiciera
+  // antes, el ancla lo pisaria.
+  window.requestAnimationFrame(function () {
+    window.scrollTo(0, parseInt(guardado, 10) || 0);
+  });
+})();

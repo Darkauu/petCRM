@@ -5,12 +5,20 @@
 {% block back %}<a class="back back-icon" href="{{ url_for('main.home') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
 
 {% block content %}
+  {% if dia %}
+    {# Se llegó desde un día pasado. Decirlo aquí evita registrar una
+       visita con la fecha de hoy creyendo que va a la de ayer. #}
+    <p class="hint hint-warn">Se registrará con fecha {{ dia | fecha(true) }}.</p>
+  {% endif %}
+
   {# Con JS los resultados caen debajo mientras se escribe. Sin JS, el
      boton Buscar recarga la pagina como siempre. #}
   <div class="typeahead"
-       data-search-url="{{ url_for('clients.search_json', destino='visita') }}">
+       data-search-url="{{ url_for('clients.search_json', destino='visita',
+                                   dia=dia or none) }}">
     <form class="search" method="get" action="{{ url_for('visits.pick_client') }}"
           role="search">
+      {% if dia %}<input type="hidden" name="dia" value="{{ dia }}">{% endif %}
       <input type="search" name="q" value="{{ term }}" autocomplete="off"
              placeholder="Nombre, teléfono o mascota" aria-label="Buscar cliente"
              role="combobox" aria-autocomplete="list"
@@ -26,10 +34,10 @@
       <ul class="list">
         {% for row in rows %}
           <li>
-            <a href="{{ url_for('visits.create', client_id=row.id) }}">
+            <a href="{{ url_for('visits.create', client_id=row.id, dia=dia or none) }}">
               <span class="list-title">{{ row.name }}</span>
               <span class="list-sub">
-                {{ row.pet_names or row.phone_display or (row.phone | phone)
+                {{ row.pet_names or (row.phone | phone)
                    or 'sin teléfono' }}
               </span>
             </a>
@@ -48,7 +56,7 @@
     <ul class="list">
       {% for row in recent %}
         <li>
-          <a href="{{ url_for('visits.create', client_id=row.id) }}">
+          <a href="{{ url_for('visits.create', client_id=row.id, dia=dia or none) }}">
             <span class="list-title">{{ row.name }}</span>
             <span class="list-sub">
               {{ row.pet_names }}{% if row.pet_names %} · {% endif %}{{ row.last_visit_date }}
