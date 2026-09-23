@@ -142,8 +142,16 @@ def clean_service(form):
 
 
 def clean_visit(form, pet_ids, service_ids, today):
-    """Lineas de la visita: 'pick' trae 'idMascota:idServicio' por cada
-    servicio marcado, y price_<mascota>_<servicio> lo que se cobro.
+    """Lineas de la visita.
+
+    'pet' trae las mascotas elegidas y 'pick' los servicios marcados, con
+    la forma 'idMascota:idServicio'; price_<mascota>_<servicio> lleva lo
+    que se cobro.
+
+    Solo cuentan los servicios de una mascota elegida. Hace falta porque
+    la pantalla esconde los servicios de las mascotas sin elegir, pero
+    los deja en el formulario: si alguien marca un servicio y despues
+    cierra esa mascota, lo marcado no debe cobrarse.
 
     pet_ids y service_ids acotan lo que se acepta, para que un formulario
     manipulado no cuelgue la visita de la mascota de otro cliente.
@@ -162,6 +170,11 @@ def clean_visit(form, pet_ids, service_ids, today):
         except ValueError:
             errors["visit_date"] = "Fecha inválida."
 
+    elegidas = {
+        int(value) for value in form.getlist("pet")
+        if str(value).isdigit() and int(value) in pet_ids
+    }
+
     lines = []
     seen = set()
     for raw in form.getlist("pick"):
@@ -169,7 +182,7 @@ def clean_visit(form, pet_ids, service_ids, today):
             pet_id, service_id = (int(part) for part in raw.split(":", 1))
         except (ValueError, TypeError):
             continue
-        if pet_id not in pet_ids or service_id not in service_ids:
+        if pet_id not in elegidas or service_id not in service_ids:
             continue
         if (pet_id, service_id) in seen:
             continue
@@ -182,6 +195,8 @@ def clean_visit(form, pet_ids, service_ids, today):
             errors[field] = str(exc)
 
     if not lines and not errors:
-        errors["lines"] = "Marca al menos un servicio."
+        errors["lines"] = ("Elige la mascota que atendiste."
+                           if not elegidas else "Marca al menos un servicio.")
 
-    return {"visit_date": visit_date, "notes": notes, "lines": lines}, errors
+    return ({"visit_date": visit_date, "notes": notes, "lines": lines,
+             "pets": elegidas}, errors)

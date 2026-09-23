@@ -12,11 +12,13 @@ ningun total. Solo 'completed' cuenta.
 El precio se congela en visit_service al momento de guardar. Cambiar el
 catalogo manana no reescribe lo que ya se cobro.
 """
-from app.clock import SQL_TODAY
+from app.clock import SQL_SHIFT, SQL_TODAY
 from app.database import execute, query_all, query_one, transaction
 
-_LIST_SQL = """
+_LIST_SQL = f"""
     SELECT v.id, v.visit_date, v.notes, v.status,
+           -- Hora en que se recibio, en hora de Panama.
+           strftime('%H:%M', v.created_at, {SQL_SHIFT}) AS hora,
            c.id   AS client_id,
            c.name AS client_name,
            c.phone,
@@ -29,7 +31,7 @@ _LIST_SQL = """
     JOIN client c ON c.id = v.client_id
     LEFT JOIN v_visit_total t ON t.visit_id = v.id
     WHERE v.deleted_at IS NULL
-      {extra}
+      {{extra}}
     ORDER BY v.visit_date DESC, v.id DESC
     LIMIT ?
 """

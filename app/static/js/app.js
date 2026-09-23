@@ -199,6 +199,14 @@ document.querySelectorAll("[data-price-mode]").forEach(function (radio) {
   function recalc() {
     var cents = 0;
     document.querySelectorAll(".line").forEach(function (line) {
+      // Una mascota cerrada no entra en la visita, aunque sus
+      // servicios sigan marcados debajo. El servidor los descarta
+      // igual: si aqui se sumaran, la pantalla diria un total y el
+      // recibo otro.
+      var card = line.closest(".pet-card");
+      var pet = card && card.querySelector(".pet-check");
+      if (pet && !pet.checked) return;
+
       var check = line.querySelector(".line-check");
       var amount = line.querySelector("[data-amount]");
       if (!check || !check.checked || !amount) return;

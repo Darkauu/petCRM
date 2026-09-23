@@ -12,6 +12,7 @@ import io
 import logging
 import os
 import pathlib
+import re
 import shutil
 import sqlite3
 import sys
@@ -162,7 +163,7 @@ def run_flow(db_path):
           "Todav" in body and "primera" in body)
 
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1", "2:1"],
+                    data={"pet": ["1", "2"], "pick": ["1:1", "2:1"],
                           "price_1_1": "18", "price_2_1": "25"})
     check("visita con dos mascotas en un solo registro", r.status_code == 302,
           r.get_data(as_text=True)[:300])
@@ -206,7 +207,7 @@ def run_flow(db_path):
 
     print("\nSe la llevaron sin atender")
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:2"], "price_1_2": "5"})
+                    data={"pet": ["1"], "pick": ["1:2"], "price_1_2": "5"})
     check("segunda visita recibida", r.status_code == 302)
     body = client.get("/visitas/pendientes").get_data(as_text=True)
     check("aparece en la lista de pendientes", "Cobrar $5.00" in body)
@@ -234,16 +235,17 @@ def run_flow(db_path):
 
     print("\nEl formulario no se deja manipular")
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["999:1"], "price_999_1": "10"})
+                    data={"pet": ["999"], "pick": ["999:1"], "price_999_1": "10"})
     check("una mascota ajena se ignora y no se guarda nada",
-          r.status_code == 400 and "al menos un servicio" in r.get_data(as_text=True))
+          r.status_code == 400
+          and "Elige la mascota" in r.get_data(as_text=True))
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1"], "price_1_1": "10",
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "10",
                           "visit_date": "2099-01-01"})
     check("una fecha futura se rechaza",
           r.status_code == 400 and "futuro" in r.get_data(as_text=True))
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1"], "price_1_1": "no es plata"})
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "no es plata"})
     body = r.get_data(as_text=True)
     check("un precio ilegible se rechaza", r.status_code == 400)
     check("el servicio marcado no se pierde al volver",
@@ -253,7 +255,7 @@ def run_flow(db_path):
 
     print("\nCorregir una visita")
     r = client.post("/visitas/1/editar",
-                    data={"pick": ["1:1", "2:1"],
+                    data={"pet": ["1", "2"], "pick": ["1:1", "2:1"],
                           "price_1_1": "20", "price_2_1": "25",
                           "notes": "Luna vino con garrapatas"})
     check("editar la visita", r.status_code == 302)
@@ -736,7 +738,8 @@ def run_auto_migrate(_unused):
     check("se respaldo antes de tocar nada", len(respaldos) == 1, respaldos)
     check("el respaldo dice de que version venia", "-v2-" in respaldos[0])
 
-    r = client.post("/visitas/nueva/1", data={"pick": ["1:1"], "price_1_1": "20"})
+    r = client.post("/visitas/nueva/1",
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "20"})
     check("registrar una visita ya funciona, sin correr ningun comando",
           r.status_code == 302, r.get_data(as_text=True)[:200])
     check("health responde ok", client.get("/health").get_json()["status"] == "ok")
@@ -839,7 +842,9 @@ def run_seed(_unused):
 
     body = client.get("/").get_data(as_text=True)
     check("y hay una visita pendiente de cobro, para ver ese flujo",
-          "pendiente de cobro" in body)
+          "Pendientes de cobro" in body and "Elsa Mora" in body, body[-1200:])
+    check("el inicio la lista con la hora en que se recibio",
+          re.search(r"Elsa Mora.{0,600}?\d\d:\d\d", body, re.S) is not None)
 
     print("\nY no hace danio donde no debe")
     r = sembrar()
@@ -956,7 +961,8 @@ def run_schema_guard(_unused):
     check("y promete que los datos no se tocan", "no se tocan" in body)
 
     # Lo que antes reventaba con sqlite3.IntegrityError a media faena.
-    r = client.post("/visitas/nueva/1", data={"pick": ["1:1"], "price_1_1": "20"})
+    r = client.post("/visitas/nueva/1",
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "20"})
     check("registrar una visita ya no revienta con un error de SQLite",
           r.status_code == 503)
 
@@ -1049,12 +1055,12 @@ def run_stats(db_path):
                 data={"name": "Corte", "price_mode": "any", "price_any": "70"})
 
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1", "1:2", "2:1"],
+                    data={"pet": ["1", "2"], "pick": ["1:1", "1:2", "2:1"],
                           "price_1_1": "20", "price_1_2": "70",
                           "price_2_1": "20", "charge": "1"})
     check("visita de hoy registrada y cobrada de una", r.status_code == 302)
     r = client.post("/visitas/nueva/2",
-                    data={"pick": ["3:1"], "price_3_1": "20",
+                    data={"pet": ["3"], "pick": ["3:1"], "price_3_1": "20",
                           "visit_date": lunes, "charge": "1"})
     check("visita del lunes registrada y cobrada", r.status_code == 302)
 
@@ -1158,7 +1164,7 @@ def run_stats(db_path):
 
     print("\nLo pendiente no infla las cifras")
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1"], "price_1_1": "999"})
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "999"})
     check("visita recibida y sin cobrar", r.status_code == 302)
 
     # El inicio va primero para consumir el mensaje flash, que tambien

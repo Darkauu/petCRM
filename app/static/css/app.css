@@ -676,3 +676,82 @@ code {
 .list li.is-late { border-color: var(--warn); border-left-width: 4px; }
 
 .btn-wa { flex-shrink: 0; }
+
+/* ---- Registrar visita: primero la mascota, despues sus servicios -----
+   Los servicios de una mascota solo aparecen cuando esa mascota esta
+   elegida. Sin esto, tres perros por cinco servicios eran quince filas
+   apiladas y habia que leerlas todas para encontrar la que importa. */
+
+.paso {
+  margin: 0 0 .5rem; font-size: .875rem; font-weight: 600; color: var(--muted);
+}
+.pet-check { position: absolute; opacity: 0; pointer-events: none; }
+.pet-face {
+  display: flex; flex-direction: column; gap: .25rem; align-items: flex-start;
+  min-height: var(--tap); justify-content: center; cursor: pointer;
+  margin: -.875rem; padding: .875rem; border-radius: var(--radius);
+}
+.pet-head { display: flex; align-items: center; gap: .5rem; width: 100%; }
+.pet-name { font-weight: 700; display: flex; gap: .5rem; align-items: baseline;
+            flex-wrap: wrap; flex: 1; }
+.pet-chevron {
+  display: flex; color: var(--muted); flex-shrink: 0;
+  transition: transform .15s ease;
+}
+.pet-check:checked ~ .pet-face .pet-chevron {
+  transform: rotate(90deg); color: var(--accent);
+}
+.pet-name small { font-weight: 400; color: var(--muted); font-size: .8125rem; }
+.pet-check:checked ~ .pet-face {
+  background: var(--accent-soft); margin-bottom: .25rem;
+}
+.pet-check:focus-visible ~ .pet-face {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.pet-services { display: none; padding-top: .75rem; }
+.pet-check:checked ~ .pet-services { display: block; }
+
+/* ---- Espacio entre una lista y el boton que la sigue -----------------
+   Un boton pegado al borde de la ultima fila se lee como parte de ella.
+   En el celular quedaban los 8px del margen de la fila; en la
+   computadora la lista es una rejilla con margen cero, asi que el boton
+   quedaba literalmente pegado. */
+
+.list + .btn, .list + .stack, .list + .contact,
+.empty + .btn, .empty + .stack { margin-top: 1rem; }
+
+/* ---- Datos del cliente en la ficha ----------------------------------
+   Lo que se pidio al registrarlo (cedula, correo, direccion) tiene que
+   leerse al entrar, no solo al editar. */
+
+.datos {
+  margin: 1rem 0 0; padding: .75rem .875rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex; flex-direction: column; gap: .625rem;
+}
+.datos dt { font-size: .75rem; color: var(--muted); text-transform: uppercase;
+            letter-spacing: .02em; }
+.datos dd { margin: .125rem 0 0; overflow-wrap: anywhere; }
+.datos dd a { color: var(--accent); }
+.datos + .note { margin-top: .5rem; }
+
+/* ---- Separador ------------------------------------------------------ */
+
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.75rem 0 0; }
+
+.hint-warn { color: var(--warn); font-weight: 600; }
+
+/* ---- Ajustes al final de la barra -----------------------------------
+   En el celular es una pestania mas, la ultima. En la computadora el
+   'margin-top: auto' la empuja hasta la esquina de abajo a la
+   izquierda, separada de las secciones del dia a dia. */
+
+@media (max-width: 899px) {
+  /* Con seis pestanias las etiquetas se aprietan: 'Servicios' es la
+     mas larga y a .8125rem se sale de su columna en 360px. */
+  .tabbar a { font-size: .75rem; padding: .75rem .125rem; }
+}
+@media (min-width: 900px) {
+  .tabbar .tab-end { margin-top: auto; }
+}
