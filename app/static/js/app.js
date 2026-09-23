@@ -232,3 +232,66 @@ document.querySelectorAll("form.form").forEach(function (form) {
     }, 0);
   });
 });
+
+
+// ---- Envios: un toque en vez de dos ------------------------------------
+// El enlace abre WhatsApp en otra pestania. Al mismo tiempo, en esta, se
+// manda el formulario que marca a esa persona y trae a la siguiente, asi
+// al volver ya esta lista la que sigue. Sin JS no se pierde nada: el
+// enlace abre el chat igual y se marca con el boton de abajo.
+(function () {
+  var abrir = document.querySelector("[data-abrir]");
+  var form = document.querySelector("form[data-marcar]");
+  if (!abrir || !form) return;
+
+  abrir.addEventListener("click", function () {
+    // Con un respiro: si se manda el formulario en el mismo instante,
+    // algunos navegadores cancelan la pestania que se estaba abriendo.
+    window.setTimeout(function () { form.submit(); }, 400);
+  });
+})();
+
+
+// ---- Envios: vista previa del mensaje ----------------------------------
+// Ver el mensaje ya resuelto con una persona de verdad es lo que evita
+// mandar seis veces "Hola {cliente}".
+(function () {
+  var campo = document.querySelector("[data-plantilla]");
+  var vista = document.querySelector("[data-vista]");
+  if (!campo || !vista) return;
+
+  var nombre = vista.dataset.nombre || "";
+  var mascota = vista.dataset.mascota || "tu mascota";
+
+  function pintar() {
+    vista.textContent = campo.value
+      .split("{cliente}").join(nombre)
+      .split("{mascota}").join(mascota);
+  }
+  campo.addEventListener("input", pintar);
+  pintar();
+})();
+
+
+// ---- Envios: recargar la lista al cambiar un filtro ---------------------
+// Se manda el formulario entero con la marca 'refiltrar', no una URL
+// nueva: asi vuelve con el mensaje que ya se habia escrito. Perder el
+// texto por tocar un filtro seria peor que no tener el filtro.
+(function () {
+  var casillas = document.querySelectorAll("[data-refiltrar]");
+  if (!casillas.length) return;
+
+  var form = casillas[0].form;
+  if (!form) return;
+
+  casillas.forEach(function (casilla) {
+    casilla.addEventListener("change", function () {
+      var marca = document.createElement("input");
+      marca.type = "hidden";
+      marca.name = "refiltrar";
+      marca.value = "1";
+      form.appendChild(marca);
+      form.submit();
+    });
+  });
+})();

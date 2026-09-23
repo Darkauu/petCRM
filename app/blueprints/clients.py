@@ -6,31 +6,17 @@ from flask import (Blueprint, flash, redirect, render_template, request,
 
 from app.database import get_db
 from app.forms import clean_client
+from app import segments
 from app.phone import format_phone
 from app.repos import clients, pets, settings, visits
 
 bp = Blueprint("clients", __name__, url_prefix="/clientes")
 
 
-# Cada filtro es una pregunta que el duenio se hace de verdad. La clave
-# de la URL elige una de estas funciones; nada de lo que llega por la
-# peticion entra en una consulta.
-FILTROS = [
-    ("escribir", "Por escribir",
-     lambda r, plazo: r["last_visit_date"] is not None and r["days"] > plazo),
-    ("sin-visitas", "Sin visitas",
-     lambda r, plazo: r["last_visit_date"] is None),
-    ("pequenos", "Perros pequeños",
-     lambda r, plazo: "small" in (r["sizes"] or "")),
-    ("medianos", "Perros medianos",
-     lambda r, plazo: "medium" in (r["sizes"] or "")),
-    ("grandes", "Perros grandes",
-     lambda r, plazo: "large" in (r["sizes"] or "")),
-    # Despues de migrar el cuaderno hay fichas a medias. Sin una forma
-    # de listarlas, el hueco se descubre con el cliente enfrente.
-    ("incompletos", "Datos incompletos",
-     lambda r, plazo: not r["phone"] or r["pets_sin_talla"] > 0),
-]
+# Definidos en app/segments.py, que es de donde los lee tambien la
+# pantalla de envios: la misma pregunta tiene que dar el mismo numero
+# en los dos lados.
+FILTROS = segments.PANEL
 
 
 @bp.get("/")

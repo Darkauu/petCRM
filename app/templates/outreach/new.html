@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Escribirle a varios{% endblock %}
+{% block heading %}Escribirle a varios{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('outreach.index') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
+
+{% block content %}
+<form method="post" class="form" novalidate
+      action="{{ url_for('outreach.create') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <p class="paso">¿A quiénes?</p>
+
+  {# Se combinan: "por escribir" Y "perros pequeños" es justo la
+     pregunta de quien quiere mandar una promo de talla chica.
+     Cambiar una casilla recarga la lista de abajo; sin JS, con el
+     botón "Ver a quiénes quedan". #}
+  <nav class="chips chips-check" aria-label="Elegir a quiénes">
+    {% for g in grupos %}
+      <label class="chip-check">
+        <input type="checkbox" name="g" value="{{ g.key }}"
+               {{ 'checked' if g.on }} data-refiltrar>
+        <span>{{ g.label }} <span class="chip-n">{{ g.count }}</span></span>
+      </label>
+    {% endfor %}
+  </nav>
+  <noscript>
+    <button class="btn btn-ghost btn-sm" type="submit" name="refiltrar" value="1">
+      Ver a quiénes quedan</button>
+  </noscript>
+
+  {% if errors.rows %}<p class="flash flash-bad">{{ errors.rows }}</p>{% endif %}
+
+  <p class="hint">
+    {% if rows %}
+      <strong>{{ rows | length }}</strong>
+      {{ 'persona' if rows | length == 1 else 'personas' }}.
+      Solo entran quienes tienen teléfono guardado.
+    {% else %}
+      Nadie coincide. Quita algún filtro.
+    {% endif %}
+  </p>
+
+  {% if rows %}
+    <ul class="list list-tight">
+      {% for row in rows %}
+        <li>
+          <a href="{{ url_for('clients.detail', client_id=row.id) }}">
+            <span class="list-title">{{ row.name }}</span>
+            <span class="list-sub">
+              {{ row.pet_names or 'sin mascotas' }}
+              {%- if row.last_visit_date %} · hace {{ row.days }} días
+              {%- else %} · sin visitas{% endif %}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <p class="paso paso-top">¿Qué les digo?</p>
+
+  <label class="field {{ 'bad' if errors.message }}">
+    <span>Mensaje</span>
+    <textarea name="message" rows="5" data-plantilla
+              maxlength="900">{{ message }}</textarea>
+    {% if errors.message %}<em>{{ errors.message }}</em>{% endif %}
+  </label>
+
+  <p class="hint">
+    Escríbelo una sola vez. <code>{cliente}</code> y <code>{mascota}</code>
+    se reemplazan por los de cada persona.
+  </p>
+
+  {% if ejemplo %}
+    {# Ver el mensaje ya resuelto con una persona de verdad es lo que
+       evita mandar seis veces "Hola {cliente}". #}
+    <div class="vista-previa">
+      <p class="vista-quien">Así le llega a {{ ejemplo.name }}:</p>
+      <p class="burbuja" data-vista
+         data-nombre="{{ ejemplo.name | nombre }}"
+         data-mascota="{{ ejemplo.pet_names or 'tu mascota' }}">{{
+         personalizar(message, ejemplo) }}</p>
+    </div>
+  {% endif %}
+
+  <label class="field">
+    <span>Nombre del envío <small>(opcional, para reconocerlo después)</small></span>
+    <input name="name" value="{{ name }}" maxlength="80"
+           placeholder="Promo de octubre">
+  </label>
+
+  <button class="btn btn-big" type="submit">
+    Empezar{% if rows %} con {{ rows | length }}{% endif %}
+  </button>
+
+  <p class="hint">
+    El sistema no manda nada por su cuenta: te va abriendo los chats de
+    WhatsApp con el mensaje ya escrito, y tú los envías.
+  </p>
+</form>
+{% endblock %}

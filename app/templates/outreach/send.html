@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ campaign.name }}{% endblock %}
+{% block heading %}{{ campaign.name }}{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('outreach.index') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
+
+{% block content %}
+  {# La cuenta arriba de todo: lo que quita el cansancio de mandar seis
+     mensajes no son los toques, es saber cuántos faltan. #}
+  <div class="avance">
+    <div class="avance-barra">
+      <span style="width: {{ (avance.hechos * 100 // avance.total) if avance.total else 0 }}%"></span>
+    </div>
+    <p class="avance-txt">
+      {{ avance.hechos + 1 }} de {{ avance.total }}
+      {%- if avance.saltados %} · {{ avance.saltados }} salteado{{ 's' if avance.saltados > 1 }}{% endif %}
+    </p>
+  </div>
+
+  <section class="envio">
+    <h2 class="envio-quien">{{ row.name }}</h2>
+    <p class="envio-sub">
+      {{ row.pet_names or 'sin mascotas' }}
+      {%- if row.last_visit_date %} · hace {{ row.days }} días
+      {%- else %} · sin visitas registradas{% endif %}
+      · {{ row.phone_display or (row.phone | phone) }}
+    </p>
+
+    <p class="burbuja">{{ texto }}</p>
+  </section>
+
+  {# Un solo toque: el enlace abre WhatsApp en otra pestaña y, con JS,
+     manda este formulario en ésta, que ya pasa al siguiente. Sin JS el
+     enlace abre el chat y se marca con el botón de abajo: dos toques,
+     nunca cero. #}
+  <form method="post" data-marcar
+        action="{{ url_for('outreach.mark', campaign_id=campaign.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="client_id" value="{{ row.client_id }}">
+
+    <a class="btn btn-big btn-wa-big" href="{{ enlace }}"
+       target="_blank" rel="noopener" data-abrir>
+      {{ icon('whatsapp', 20) }} Abrir el chat de {{ row.name | nombre }}
+    </a>
+
+    <div class="stack stack-top">
+      <button class="btn btn-ghost" type="submit">Ya le escribí →</button>
+      <button class="btn btn-ghost btn-muted" type="submit"
+              name="skip" value="1">Saltar a este</button>
+    </div>
+  </form>
+{% endblock %}

@@ -17,6 +17,7 @@ import argparse
 import contextlib
 import io
 import logging
+import re
 import sqlite3
 import sys
 import tempfile
@@ -92,6 +93,23 @@ def seeded_app():
             "is_active": 1})
         visits.create(cira, shift(today(), -40), None,
                       [(nina, 1, 2000)], status="completed")
+
+        # Dos mas atrasados: un envio de uno solo no probaria que la
+        # pantalla avanza al siguiente.
+        for nombre, tel, mascota, dias in (
+                ("Elsa Mora", "+50760077788", "Pelusa", 35),
+                ("Fabio Ruiz", "+50760099900", "Bruno", 22)):
+            cid = clients.create({
+                "name": nombre, "phone": tel, "phone_display": None,
+                "document": None, "email": None, "address": None,
+                "notes": None})
+            pid = pets.create({
+                "client_id": cid, "name": mascota, "species": "dog",
+                "breed": None, "size": "medium", "sex": None,
+                "birthdate": None, "weight_kg": None, "temperament": None,
+                "medical_notes": None, "is_active": 1})
+            visits.create(cid, shift(today(), -dias), None,
+                          [(pid, 1, 2000)], status="completed")
         get_db().commit()
     return app
 
@@ -273,6 +291,59 @@ def run(page, url):
     check("la cedula se ve al entrar, sin abrir el editor",
           "8-123-456" in datos, datos)
     check("y la direccion tambien", "Via Espania" in datos, datos)
+
+    print("\nEscribirle a varios: la vista previa en vivo")
+    page.goto(f"{url}/escribir/nuevo?g=escribir")
+    campo = page.locator("[data-plantilla]")
+    vista = page.locator("[data-vista]")
+    check("hay alguien a quien escribirle", vista.count() == 1)
+    campo.fill("Hola {cliente}, traele a {mascota} el jueves")
+    page.wait_for_timeout(200)
+    texto = vista.inner_text()
+    check("el mensaje se resuelve mientras se escribe",
+          "{cliente}" not in texto and "{mascota}" not in texto, texto)
+    check("con el nombre de pila de una persona de verdad",
+          texto.startswith("Hola Cira,"), texto)
+
+    # Tocar un filtro no puede costar el mensaje ya escrito: se manda el
+    # formulario entero, no una URL nueva.
+    page.click(".chip-check:has-text('Perros grandes') span")
+    page.wait_for_load_state("networkidle")
+    check("cambiar un filtro no borra lo que ya se escribio",
+          "el jueves" in page.locator("[data-plantilla]").input_value(),
+          page.locator("[data-plantilla]").input_value())
+
+    print("\nEscribirle a varios: un toque en vez de dos")
+    page.goto(f"{url}/escribir/nuevo?g=escribir")
+    page.fill("[data-plantilla]", "Hola {cliente}")
+    page.click("button[type=submit]")
+    page.wait_for_url(re.compile(r"/escribir/\d+$"), timeout=5000)
+
+    primero = page.locator(".envio-quien").inner_text()
+    enlace = page.locator("[data-abrir]")
+    check("el chat se abre en otra pestania, no encima del sistema",
+          enlace.get_attribute("target") == "_blank"
+          and "noopener" in (enlace.get_attribute("rel") or ""))
+    check("y el enlace ya lleva el mensaje escrito",
+          "?text=Hola%20" in enlace.get_attribute("href"),
+          enlace.get_attribute("href"))
+
+    # Al tocar el enlace: se abre WhatsApp en otra pestania Y esta
+    # avanza sola al siguiente. Sin JS haria falta el segundo boton.
+    with page.context.expect_page() as nueva:
+        enlace.click()
+    chat = nueva.value
+    # Solo que la pestania se abrio: si de verdad carga wa.me depende
+    # de que haya internet, y eso no es lo que se esta probando aqui.
+    check("tocar abre de verdad una pestania nueva", chat is not None)
+    chat.close()
+    page.wait_for_url(re.compile(r"/escribir/\d+$"), timeout=5000)
+    page.wait_for_timeout(600)
+    segundo = page.locator(".envio-quien").inner_text()
+    check("y la pantalla ya paso sola al siguiente",
+          segundo != primero, f"{primero} -> {segundo}")
+    check("la cuenta lo refleja", "2 de 3" in page.inner_text(".avance-txt"),
+          page.inner_text(".avance-txt"))
 
     print("\nDia y noche")
     page.goto(f"{url}/resumen/")

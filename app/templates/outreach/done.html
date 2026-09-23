@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ campaign.name }}{% endblock %}
+{% block heading %}{{ campaign.name }}{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('outreach.index') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
+
+{% block content %}
+  <div class="callout">
+    <strong>Terminaste: {{ avance.enviados }} de {{ avance.total }}</strong>
+    <span>
+      {%- if avance.saltados -%}
+        {{ avance.saltados }} salteado{{ 's' if avance.saltados > 1 }}
+      {%- else -%}
+        No quedó nadie sin escribir
+      {%- endif -%}
+    </span>
+  </div>
+
+  <ul class="list list-tight">
+    {% for row in rows %}
+      <li class="{{ 'inactive' if row.skipped_at }}">
+        <a href="{{ url_for('clients.detail', client_id=row.client_id) }}">
+          <span class="list-title">{{ row.name }}</span>
+          <span class="list-sub">
+            {% if row.sent_at %}escrito{% else %}salteado{% endif %}
+            · {{ row.pet_names or 'sin mascotas' }}
+          </span>
+        </a>
+        {# El dedo toca el botón de al lado. Sin esto, un toque errado
+           deja a alguien fuera del envío para siempre. #}
+        <form method="post" class="row-action"
+              action="{{ url_for('outreach.unmark', campaign_id=campaign.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="client_id" value="{{ row.client_id }}">
+          <button class="btn btn-sm btn-ghost" type="submit">Rehacer</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+
+  <div class="stack stack-top">
+    {% if not campaign.closed_at %}
+      <form method="post"
+            action="{{ url_for('outreach.close', campaign_id=campaign.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-big" type="submit">Cerrar el envío</button>
+      </form>
+    {% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('outreach.create') }}">
+      Empezar otro</a>
+  </div>
+
+  <form method="post" class="danger"
+        action="{{ url_for('outreach.archive', campaign_id=campaign.id) }}"
+        data-confirm="¿Eliminar este envío? Se pierde el registro de a quién le escribiste."
+        data-confirm-ok="Eliminar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-danger" type="submit">Eliminar el envío</button>
+  </form>
+{% endblock %}

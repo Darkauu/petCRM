@@ -307,8 +307,10 @@ def run_flow(db_path):
     lista = client.get("/clientes/?f=escribir").get_data(as_text=True)
     check("el panel de clientes ya trae el boton de WhatsApp",
           "wa.me" in lista and "Escribirle" in lista)
+    # 'btn-sm btn-wa' es el boton de la FILA. El de arriba, que lleva a
+    # escribirle a todo el grupo, es otra clase y no debe contarse aqui.
     check("y solo para quien se paso del plazo",
-          lista.count("btn-wa") == 1, lista.count("btn-wa"))
+          lista.count("btn-sm btn-wa") == 1, lista.count("btn-sm btn-wa"))
     check("la mascota sin visitas sigue marcada como hueco",
           "Sin visitas registradas" in body)
 
@@ -1427,6 +1429,204 @@ def run_import(_unused):
           "wa.me/50767778899" in body)
 
 
+def run_outreach(db_path):
+    """Escribirle el mismo mensaje a varios, uno por uno."""
+    import re
+    from urllib.parse import unquote
+
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db_path
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    app = create_app(Cfg)
+    client = sign_in(app.test_client())
+
+    client.post("/servicios/nuevo",
+                data={"name": "Bano", "price_mode": "any", "price_any": "20"})
+    gente = [("Ana Vega", "6123-4567", "Rocky", "small", 62),
+             ("Don Pedro", "6111-2222", "Kira", "small", 40),
+             ("Cira Paz", "6333-4444", "Nina", "large", 30),
+             ("Dora Saez", "6555-6666", "Toby", "small", 2)]
+    for n, (nombre, tel, mascota, talla, _) in enumerate(gente, start=1):
+        client.post("/clientes/nuevo", data={"name": nombre, "phone": tel})
+        client.post(f"/clientes/{n}/mascotas/nueva",
+                    data={"name": mascota, "size": talla})
+    # Alguien sin telefono: no puede entrar a un envio.
+    client.post("/clientes/nuevo", data={"name": "Sin Numero"})
+
+    with app.app_context():
+        from app.clock import shift, today
+        from app.database import get_db
+        from app.repos import visits
+        for n, (_, _, _, _, dias) in enumerate(gente, start=1):
+            visits.create(n, shift(today(), -dias), None, [(n, 1, 2000)],
+                          status="completed")
+        get_db().commit()
+
+    print("\nElegir a quienes")
+
+    body = client.get("/clientes/").get_data(as_text=True)
+    check("desde el panel se llega a los envios siempre",
+          "Escribirle a varios" in body)
+
+    body = client.get("/escribir/nuevo?g=escribir").get_data(as_text=True)
+    check("los atrasados son tres", "<strong>3</strong>" in body, body[:900])
+    check("y Dora, que vino hace dos dias, no esta",
+          "Dora" not in body)
+    check("quien no tiene telefono tampoco entra: no hay a donde escribirle",
+          "Sin Numero" not in body)
+
+    # Lo que hace util esto: cruzar dos preguntas. 'Atrasados' Y
+    # 'perro pequenio' es justo la promo de talla chica.
+    body = client.get("/escribir/nuevo?g=escribir&g=pequenos").get_data(as_text=True)
+    check("los filtros se combinan entre si", "<strong>2</strong>" in body)
+    check("Ana y Don Pedro si", "Ana Vega" in body and "Don Pedro" in body)
+    check("Cira Paz no: su perro es grande", "Cira Paz" not in body)
+
+    def cuenta_chip(html, etiqueta):
+        """El numero que la pantalla pone al lado de una pestania."""
+        m = re.search(etiqueta + r"\s*<span class=\"chip-n\">(\d+)</span>",
+                      html, re.S)
+        return int(m.group(1)) if m else None
+
+    panel = client.get("/clientes/").get_data(as_text=True)
+    envios = client.get("/escribir/nuevo").get_data(as_text=True)
+
+    # Es la razon de que los criterios vivan en app/segments.py: si cada
+    # pantalla contara por su cuenta, el dia que cambie el criterio los
+    # dos numeros dejarian de cuadrar y nadie sabria cual creer.
+    check("'Por escribir' da el mismo numero en las dos pantallas",
+          cuenta_chip(panel, "Por escribir") ==
+          cuenta_chip(envios, "Por escribir") == 3,
+          (cuenta_chip(panel, "Por escribir"), cuenta_chip(envios, "Por escribir")))
+
+    # Y donde NO cuadran, es a proposito: Sin Numero no tiene telefono,
+    # asi que el panel lo cuenta y los envios no.
+    check("pero los envios no cuentan a quien no se le puede escribir",
+          cuenta_chip(panel, "Sin visitas") == 1
+          and cuenta_chip(envios, "Sin visitas") == 0,
+          (cuenta_chip(panel, "Sin visitas"), cuenta_chip(envios, "Sin visitas")))
+
+    print("\nEscribir el mensaje una sola vez")
+
+    check("se ve como le llega a una persona de verdad, ya resuelto",
+          "Hola Ana, \u00bfc\u00f3mo est\u00e1 Rocky?" in body, body[:600])
+    check("y con el nombre de pila, no el completo",
+          "Hola Ana Vega" not in body)
+
+    r = client.post("/escribir/nuevo",
+                    data={"g": ["escribir"], "message": "  "})
+    check("un mensaje vacio se rechaza",
+          r.status_code == 400 and "Escribe el mensaje" in r.get_data(as_text=True))
+
+    r = client.post("/escribir/nuevo",
+                    data={"g": ["sin-visitas"], "message": "Hola"})
+    check("y un envio sin destinatarios tambien",
+          r.status_code == 400 and "nadie" in r.get_data(as_text=True).lower())
+
+    MENSAJE = "Hola {cliente}, \u00bftraes a {mascota}? 50% & m\u00e1s"
+    r = client.post("/escribir/nuevo",
+                    data={"g": ["escribir"], "message": MENSAJE,
+                          "name": "Promo de prueba"})
+    check("con destinatarios y mensaje, arranca", r.status_code == 302,
+          r.get_data(as_text=True)[:300])
+    envio = r.headers["Location"]
+
+    print("\nUno por uno, sin perder la cuenta")
+
+    orden = []
+    for paso in range(5):
+        body = client.get(envio).get_data(as_text=True)
+        if "Terminaste" in body:
+            break
+        quien = re.search(r'envio-quien">([^<]+)', body).group(1)
+        orden.append(quien)
+        if paso == 0:
+            enlace = re.search(r'href="(https://wa\.me/[^"]+)"', body).group(1)
+            check("el enlace lleva el numero internacional",
+                  enlace.startswith("https://wa.me/50761234567?text="), enlace[:60])
+            # Un & sin escapar partiria la URL y el mensaje llegaria
+            # cortado a la mitad.
+            texto = unquote(enlace.split("?text=", 1)[1])
+            check("y el mensaje ya escrito, personalizado",
+                  texto == "Hola Ana, \u00bftraes a Rocky? 50% & m\u00e1s", texto)
+            check("la cuenta dice por cual va", "1 de 3" in body, body[:900])
+
+        cid = re.search(r'name="client_id" value="(\d+)"', body).group(1)
+        # Al segundo se le saltea, para separar 'escrito' de 'salteado'.
+        extra = {"skip": "1"} if paso == 1 else {}
+        client.post(envio + "/marcar", data={"client_id": cid, **extra})
+
+    check("van saliendo del mas atrasado al menos",
+          orden == ["Ana Vega", "Don Pedro", "Cira Paz"], orden)
+
+    body = client.get(envio).get_data(as_text=True)
+    check("al final dice cuantos se escribieron", "Terminaste: 2 de 3" in body,
+          body[:600])
+    check("y cuantos se saltearon", "1 salteado" in body)
+
+    print("\nNo se le escribe dos veces a la misma persona")
+
+    with app.app_context():
+        from app.repos import outreach
+        antes = outreach.targets(1)
+        marcas = [(r["name"], r["sent_at"]) for r in antes if r["sent_at"]]
+    # Un doble toque, o el boton de atras, no puede reescribir la hora
+    # ni convertir un salteado en escrito.
+    client.post(envio + "/marcar", data={"client_id": "2"})
+    with app.app_context():
+        from app.repos import outreach
+        despues = outreach.targets(1)
+        check("volver a marcar a un salteado no lo convierte en escrito",
+              [r["skipped_at"] is not None for r in despues if r["client_id"] == 2] == [True])
+        check("ni cambia la hora de quien ya estaba escrito",
+              [(r["name"], r["sent_at"]) for r in despues if r["sent_at"]] == marcas)
+
+    print("\nUn toque errado se puede deshacer")
+
+    # Es la otra mitad de "no pierdas la cuenta": sin rehacer, un dedo
+    # que toca el boton de al lado deja a alguien fuera para siempre.
+    client.post(envio + "/rehacer", data={"client_id": "1"})
+    body = client.get(envio).get_data(as_text=True)
+    check("quien se marco por error vuelve a la cola",
+          "Ana Vega" in body and "Terminaste" not in body, body[:600])
+    check("y la cuenta lo refleja", "3 de 3" in body, body[:900])
+
+    cid = re.search(r'name="client_id" value="(\d+)"', body).group(1)
+    client.post(envio + "/marcar", data={"client_id": cid})
+
+    print("\nEl envio queda registrado")
+
+    body = client.get("/escribir/").get_data(as_text=True)
+    check("aparece en la lista de envios", "Promo de prueba" in body)
+    check("con cuantos de cuantos", "2/3" in body, body[:900])
+    # Un salteado ya se decidio. Marcarlo como pendiente pondria
+    # "faltan 1" en un envio que si termino.
+    check("y sin marcarlo como pendiente: nadie quedo sin tocar",
+          "faltan" not in body, body[:900])
+
+    r = client.post(envio + "/cerrar", follow_redirects=True)
+    check("se puede cerrar", "cerrado" in r.get_data(as_text=True))
+
+    r = client.post(envio + "/eliminar", follow_redirects=True)
+    check("y eliminar", "eliminado" in r.get_data(as_text=True))
+    check("y entonces ya no esta",
+          "Promo de prueba" not in client.get("/escribir/").get_data(as_text=True))
+
+    print("\nY no se le escribe a quien pidio que no")
+
+    with app.app_context():
+        from app.database import get_db
+        get_db().execute(
+            "UPDATE client SET preferred_channel = 'none' WHERE name = 'Ana Vega'")
+        get_db().commit()
+    body = client.get("/escribir/nuevo?g=escribir").get_data(as_text=True)
+    check("queda fuera de los envios", "Ana Vega" not in body, body[:600])
+    check("pero los demas siguen", "Don Pedro" in body)
+
+
 def short_date_of(app, iso, weekday=False):
     with app.app_context():
         from app.labels import short_date
@@ -1442,7 +1642,7 @@ def shift_of(app, iso, days):
 if __name__ == "__main__":
     for runner in (run_flow, run_csrf, run_stats, run_interface,
                    run_schema_guard, run_auto_migrate, run_auth,
-                   run_backups, run_seed, run_import):
+                   run_backups, run_seed, run_import, run_outreach):
         path = fresh_db()
         try:
             runner(path)

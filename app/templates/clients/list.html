@@ -23,6 +23,14 @@
         role="listbox" data-results hidden></ul>
   </div>
 
+  {# La puerta a los envíos tiene que estar siempre, no solo cuando hay
+     un filtro puesto: quien piensa "quiero escribirle a varios" viene
+     a Clientes, no a adivinar una dirección. #}
+  <p class="sublink">
+    <a href="{{ url_for('outreach.index') }}">
+      {{ icon('whatsapp', 15) }} Escribirle a varios</a>
+  </p>
+
   {# Cada pestaña es una pregunta que el dueño se hace de verdad, y trae
      su número al lado: sirve tanto para filtrar como para saber cuántos
      son sin tener que contarlos. #}
@@ -34,6 +42,16 @@
       </a>
     {% endfor %}
   </nav>
+
+  {# Con un grupo elegido, el paso siguiente natural es escribirles a
+     todos. El filtro viaja con el enlace para no volver a elegirlo. #}
+  {% if elegido and elegido != 'incompletos' and rows %}
+    <a class="btn btn-ghost btn-big btn-wa-big"
+       href="{{ url_for('outreach.create', g=elegido) }}">
+      {{ icon('whatsapp', 18) }}
+      Escribirle a {{ 'este' if rows | length == 1 else 'los ' ~ (rows | length) }}
+    </a>
+  {% endif %}
 
   {% if rows %}
     <ul class="list">
