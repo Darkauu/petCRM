@@ -51,6 +51,7 @@ def _register_blueprints(app):
     from app.blueprints.auth import bp as auth_bp
     from app.blueprints.clients import bp as clients_bp
     from app.blueprints.main import bp as main_bp
+    from app.blueprints.outreach import bp as outreach_bp
     from app.blueprints.pets import bp as pets_bp
     from app.blueprints.services import bp as services_bp
     from app.blueprints.settings import bp as settings_bp
@@ -60,6 +61,7 @@ def _register_blueprints(app):
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(clients_bp)
+    app.register_blueprint(outreach_bp)
     app.register_blueprint(pets_bp)
     app.register_blueprint(services_bp)
     app.register_blueprint(settings_bp)

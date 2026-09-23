@@ -9,8 +9,9 @@ from datetime import date, datetime, timedelta, timezone
 
 OFFSET_HOURS = -5
 
-# Fragmento reutilizable para consultas: fecha de calendario local.
-SQL_TODAY = "date('now', '-5 hours')"
+# Fragmentos reutilizables para consultas, en hora local.
+SQL_SHIFT = "'-5 hours'"
+SQL_TODAY = f"date('now', {SQL_SHIFT})"
 
 
 def now():

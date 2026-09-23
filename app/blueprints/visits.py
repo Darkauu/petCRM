@@ -74,11 +74,15 @@ def create(client_id):
         return redirect(url_for("services.create"))
 
     if request.method == "GET":
+        # Con una sola mascota no hay nada que elegir: se abre sola y el
+        # caso comun queda igual de rapido que antes.
+        abiertas = {pet_rows[0]["id"]} if len(pet_rows) == 1 else set()
         return render_template(
             "visits/form.html",
             client=client, pet_rows=pet_rows, service_rows=service_rows,
             grid=_grid(client_id, pet_rows, service_rows),
-            picked=set(), visit={"visit_date": today()}, errors={},
+            picked=set(), abiertas=abiertas,
+            visit={"visit_date": today()}, errors={},
         )
 
     data, errors = clean_visit(
@@ -138,7 +142,8 @@ def edit(visit_id):
             "visits/form.html",
             client=client, pet_rows=pet_rows, service_rows=service_rows,
             grid=_grid(visit["client_id"], pet_rows, service_rows, existing),
-            picked=set(existing), visit=visit, errors={},
+            picked=set(existing), abiertas={pet for pet, _ in existing},
+            visit=visit, errors={},
         )
 
     data, errors = clean_visit(
@@ -200,8 +205,11 @@ def reopen(visit_id):
 
 
 def _back(visit):
-    """Vuelve a donde se venia: la lista de pendientes o el dia."""
-    if request.form.get("from") == "pending":
+    """Vuelve a donde se venia: el inicio, los pendientes o el dia."""
+    origen = request.form.get("from")
+    if origen == "home":
+        return url_for("main.home")
+    if origen == "pending":
         return url_for("visits.pending")
     return url_for("visits.index", dia=visit["visit_date"])
 
@@ -223,6 +231,7 @@ def _rerender(client, pet_rows, service_rows, data, errors):
         tuple(int(part) for part in key.split("_")[1:])
         for key in errors if key.startswith("price_")
     }
+    abiertas = set(data.get("pets") or ()) | {pet for pet, _ in picked}
     grid = _grid(
         client["id"], pet_rows, service_rows,
         {(pet, svc): cents for pet, svc, cents in data["lines"]},
@@ -230,7 +239,7 @@ def _rerender(client, pet_rows, service_rows, data, errors):
     return render_template(
         "visits/form.html",
         client=client, pet_rows=pet_rows, service_rows=service_rows,
-        grid=grid, picked=picked, visit=data, errors=errors,
+        grid=grid, picked=picked, abiertas=abiertas, visit=data, errors=errors,
     )
 
 

@@ -10,6 +10,9 @@
       </span>
       <span class="list-sub">
         {%- if show_date %}{{ row.visit_date | fecha(true) }} · {% endif -%}
+        {#- La hora de recibo solo importa mientras esta pendiente: dice
+            cual mascota lleva mas rato adentro esperando. -#}
+        {%- if row.status == 'pending' and row.hora %}{{ row.hora }} · {% endif -%}
         {{ row.pet_names or 'sin servicios' }}
       </span>
       {% if row.status == 'cancelled' %}

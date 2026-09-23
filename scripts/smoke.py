@@ -12,6 +12,7 @@ import io
 import logging
 import os
 import pathlib
+import re
 import shutil
 import sqlite3
 import sys
@@ -88,14 +89,23 @@ def run_flow(db_path):
                     data={"name": "Luna", "size": "large", "and_another": "1"})
     check("'guardar y agregar otra' regresa al formulario",
           r.status_code == 302 and "/mascotas/nueva" in r.headers["Location"])
+    # Una mascota sin talla SI se guarda: del cuaderno entran asi, y
+    # una talla inventada cobra mal el proximo bano. El hueco tiene
+    # que quedar a la vista, que es lo que se comprueba abajo.
     r = client.post("/clientes/1/mascotas/nueva", data={"name": "SinTalla"})
-    check("no se guarda una mascota sin tamanio",
-          r.status_code == 400)
+    check("una mascota sin tamanio se guarda igual", r.status_code == 302,
+          r.get_data(as_text=True)[:200])
+    body = client.get("/clientes/1").get_data(as_text=True)
+    check("pero el hueco queda escrito en la ficha",
+          "falta el tama" in body.lower())
+    check("y una talla inventada sigue sin colarse",
+          client.post("/clientes/1/mascotas/nueva",
+                      data={"name": "X", "size": "gigante"}).status_code == 400)
 
     body = client.get("/clientes/1").get_data(as_text=True)
     check("la ficha lista las dos mascotas", "Toby" in body and "Luna" in body)
     check("la ficha avisa que no hay visitas registradas",
-          body.count("Sin visitas registradas") == 2)
+          body.count("Sin visitas registradas") == 3)
     check("la ficha muestra el manejo del perro", "muerde al secar" in body)
 
     print("\nPanel de clientes: a quien escribirle, sin entrar a nadie")
@@ -162,7 +172,7 @@ def run_flow(db_path):
           "Todav" in body and "primera" in body)
 
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1", "2:1"],
+                    data={"pet": ["1", "2"], "pick": ["1:1", "2:1"],
                           "price_1_1": "18", "price_2_1": "25"})
     check("visita con dos mascotas en un solo registro", r.status_code == 302,
           r.get_data(as_text=True)[:300])
@@ -174,7 +184,7 @@ def run_flow(db_path):
 
     body = client.get("/clientes/1").get_data(as_text=True)
     check("una visita pendiente no cuenta como ultima visita de la mascota",
-          body.count("Sin visitas registradas") == 2)
+          body.count("Sin visitas registradas") == 3)
 
     body = client.get("/visitas/nueva/1").get_data(as_text=True)
     check("y tampoco sirve de referencia de precio: sale el de lista",
@@ -206,7 +216,7 @@ def run_flow(db_path):
 
     print("\nSe la llevaron sin atender")
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:2"], "price_1_2": "5"})
+                    data={"pet": ["1"], "pick": ["1:2"], "price_1_2": "5"})
     check("segunda visita recibida", r.status_code == 302)
     body = client.get("/visitas/pendientes").get_data(as_text=True)
     check("aparece en la lista de pendientes", "Cobrar $5.00" in body)
@@ -234,16 +244,17 @@ def run_flow(db_path):
 
     print("\nEl formulario no se deja manipular")
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["999:1"], "price_999_1": "10"})
+                    data={"pet": ["999"], "pick": ["999:1"], "price_999_1": "10"})
     check("una mascota ajena se ignora y no se guarda nada",
-          r.status_code == 400 and "al menos un servicio" in r.get_data(as_text=True))
+          r.status_code == 400
+          and "Elige la mascota" in r.get_data(as_text=True))
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1"], "price_1_1": "10",
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "10",
                           "visit_date": "2099-01-01"})
     check("una fecha futura se rechaza",
           r.status_code == 400 and "futuro" in r.get_data(as_text=True))
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1"], "price_1_1": "no es plata"})
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "no es plata"})
     body = r.get_data(as_text=True)
     check("un precio ilegible se rechaza", r.status_code == 400)
     check("el servicio marcado no se pierde al volver",
@@ -253,7 +264,7 @@ def run_flow(db_path):
 
     print("\nCorregir una visita")
     r = client.post("/visitas/1/editar",
-                    data={"pick": ["1:1", "2:1"],
+                    data={"pet": ["1", "2"], "pick": ["1:1", "2:1"],
                           "price_1_1": "20", "price_2_1": "25",
                           "notes": "Luna vino con garrapatas"})
     check("editar la visita", r.status_code == 302)
@@ -271,7 +282,7 @@ def run_flow(db_path):
     check("el dia vuelve a cero", "$0.00" in body)
     body = client.get("/clientes/1").get_data(as_text=True)
     check("la visita eliminada deja de contar para el marcador",
-          body.count("Sin visitas registradas") == 2)
+          body.count("Sin visitas registradas") == 3)
 
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
@@ -296,8 +307,10 @@ def run_flow(db_path):
     lista = client.get("/clientes/?f=escribir").get_data(as_text=True)
     check("el panel de clientes ya trae el boton de WhatsApp",
           "wa.me" in lista and "Escribirle" in lista)
+    # 'btn-sm btn-wa' es el boton de la FILA. El de arriba, que lleva a
+    # escribirle a todo el grupo, es otra clase y no debe contarse aqui.
     check("y solo para quien se paso del plazo",
-          lista.count("btn-wa") == 1, lista.count("btn-wa"))
+          lista.count("btn-sm btn-wa") == 1, lista.count("btn-sm btn-wa"))
     check("la mascota sin visitas sigue marcada como hueco",
           "Sin visitas registradas" in body)
 
@@ -723,7 +736,10 @@ def run_auto_migrate(_unused):
     client = sign_in(app.test_client())
 
     conn = sqlite3.connect(db)
-    check("la version sube sola", conn.execute("PRAGMA user_version").fetchone()[0] == 3)
+    from app.schema import expected_version
+    ultima = expected_version(str(BASE_DIR / "migrations"))
+    check("la version sube sola",
+          conn.execute("PRAGMA user_version").fetchone()[0] == ultima, ultima)
     check("el cliente sigue ahi",
           conn.execute("SELECT name FROM client").fetchone()[0] == "Marta")
     check("la visita historica se conserva con su estado",
@@ -736,7 +752,8 @@ def run_auto_migrate(_unused):
     check("se respaldo antes de tocar nada", len(respaldos) == 1, respaldos)
     check("el respaldo dice de que version venia", "-v2-" in respaldos[0])
 
-    r = client.post("/visitas/nueva/1", data={"pick": ["1:1"], "price_1_1": "20"})
+    r = client.post("/visitas/nueva/1",
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "20"})
     check("registrar una visita ya funciona, sin correr ningun comando",
           r.status_code == 302, r.get_data(as_text=True)[:200])
     check("health responde ok", client.get("/health").get_json()["status"] == "ok")
@@ -839,7 +856,9 @@ def run_seed(_unused):
 
     body = client.get("/").get_data(as_text=True)
     check("y hay una visita pendiente de cobro, para ver ese flujo",
-          "pendiente de cobro" in body)
+          "Pendientes de cobro" in body and "Elsa Mora" in body, body[-1200:])
+    check("el inicio la lista con la hora en que se recibio",
+          re.search(r"Elsa Mora.{0,600}?\d\d:\d\d", body, re.S) is not None)
 
     print("\nY no hace danio donde no debe")
     r = sembrar()
@@ -956,7 +975,8 @@ def run_schema_guard(_unused):
     check("y promete que los datos no se tocan", "no se tocan" in body)
 
     # Lo que antes reventaba con sqlite3.IntegrityError a media faena.
-    r = client.post("/visitas/nueva/1", data={"pick": ["1:1"], "price_1_1": "20"})
+    r = client.post("/visitas/nueva/1",
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "20"})
     check("registrar una visita ya no revienta con un error de SQLite",
           r.status_code == 503)
 
@@ -1049,12 +1069,12 @@ def run_stats(db_path):
                 data={"name": "Corte", "price_mode": "any", "price_any": "70"})
 
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1", "1:2", "2:1"],
+                    data={"pet": ["1", "2"], "pick": ["1:1", "1:2", "2:1"],
                           "price_1_1": "20", "price_1_2": "70",
                           "price_2_1": "20", "charge": "1"})
     check("visita de hoy registrada y cobrada de una", r.status_code == 302)
     r = client.post("/visitas/nueva/2",
-                    data={"pick": ["3:1"], "price_3_1": "20",
+                    data={"pet": ["3"], "pick": ["3:1"], "price_3_1": "20",
                           "visit_date": lunes, "charge": "1"})
     check("visita del lunes registrada y cobrada", r.status_code == 302)
 
@@ -1158,7 +1178,7 @@ def run_stats(db_path):
 
     print("\nLo pendiente no infla las cifras")
     r = client.post("/visitas/nueva/1",
-                    data={"pick": ["1:1"], "price_1_1": "999"})
+                    data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "999"})
     check("visita recibida y sin cobrar", r.status_code == 302)
 
     # El inicio va primero para consumir el mensaje flash, que tambien
@@ -1197,6 +1217,416 @@ def run_stats(db_path):
           "Esta semana" in body)
 
 
+CUADERNO = """\
+Fecha,Cliente,Tel\u00e9fono,Mascota,Tama\u00f1o,Raza,Servicio,Precio,Notas
+2026-07-03,Ana Vega,6123-4567,Rocky,mediano,Schnauzer,Ba\u00f1o,18.00,
+14/07/2026,Marta R\u00edos,6555-1122,Toby,peque\u00f1o,,Ba\u00f1o,15.00,
+2026-07-21,ana vega,61234567,Rocky,,,Ba\u00f1o,18.00,vino nerviosa
+2026-08-02,Don Pedro,,Coco,,Poodle,Ba\u00f1o,15.00,el del kiosko
+2026-08-11,Marta Rios,6555-1122,Luna,grande,Labrador,Ba\u00f1o,25.00,
+2026-08-15,Sra. Lidia,999,Pelusa,enorme,,Ba\u00f1o,15,
+,Nadie,6111-2222,Fantasma,peque\u00f1o,,Ba\u00f1o,15.00,sin fecha
+2099-01-01,Del Futuro,6111-3333,Cronos,peque\u00f1o,,Ba\u00f1o,15.00,
+2026-08-30,Precio Malo,6111-4444,Roto,peque\u00f1o,,Ba\u00f1o,quince d\u00f3lares,
+"""
+
+
+def run_import(_unused):
+    """scripts/import_csv.py: pasar el cuaderno de papel al sistema."""
+    import subprocess
+
+    work = tempfile.mkdtemp()
+    db = os.path.join(work, "petcrm.db")
+    csv_path = os.path.join(work, "cuaderno.csv")
+    pathlib.Path(csv_path).write_text(CUADERNO, encoding="utf-8")
+    entorno = dict(os.environ, DB_PATH=db, AUTO_BACKUP="0")
+
+    def importar(*extra):
+        return subprocess.run(
+            [sys.executable, str(BASE_DIR / "scripts" / "import_csv.py"),
+             csv_path, *extra],
+            cwd=str(BASE_DIR), env=entorno, capture_output=True, text=True)
+
+    subprocess.run([sys.executable, str(BASE_DIR / "scripts" / "init_db.py")],
+                   cwd=str(BASE_DIR), env=entorno, capture_output=True)
+
+    print("\nMigrar el cuaderno de papel")
+
+    r = importar()
+    check("por defecto solo informa, no escribe",
+          r.returncode == 0 and "No se escribio nada" in r.stdout, r.stderr[-400:])
+    conn = sqlite3.connect(db)
+    check("y la base sigue vacia de verdad",
+          conn.execute("SELECT COUNT(*) FROM client").fetchone()[0] == 0)
+    conn.close()
+
+    check("cuenta lo que entra y lo que no",
+          "se pueden importar: 6" in r.stdout and "no se pueden leer:  3" in r.stdout,
+          r.stdout[:600])
+    check("dice cual renglon no se pudo leer y por que",
+          "falta fecha" in r.stdout and "futuro" in r.stdout
+          and "quince d" in r.stdout, r.stdout[-900:])
+    check("y deja los ilegibles en un CSV para corregirlos",
+          os.path.exists(os.path.join(work, "cuaderno-rechazados.csv")))
+
+    # El precio de lista se deduce por talla, que es como cobra una
+    # peluqueria: el mismo bano vale distinto segun el perro.
+    check("propone el precio de lista que dice el papel, por talla",
+          "$15.00" in r.stdout and "$18.00" in r.stdout and "$25.00" in r.stdout,
+          r.stdout[:900])
+
+    r = importar("--commit")
+    check("con --commit si escribe", r.returncode == 0, r.stderr[-400:])
+    check("y saca un respaldo antes de tocar nada",
+          "antes-de-importar" in r.stdout)
+
+    conn = sqlite3.connect(db)
+    conn.row_factory = sqlite3.Row
+    cuenta = lambda t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+
+    # 'Ana Vega' y 'ana vega' son la misma persona: el telefono manda.
+    # 'Ana Vega' + 'ana vega' y 'Marta Rios' + 'Marta Rios' se juntan
+    # por telefono; Don Pedro y Sra. Lidia entran por nombre.
+    check("el mismo cliente escrito de dos formas entra una sola vez",
+          cuenta("client") == 4, cuenta("client"))
+    check("las mascotas quedan colgadas de su duenio",
+          cuenta("pet") == 5, cuenta("pet"))
+    check("y cada dia del cuaderno es una visita",
+          cuenta("visit") == 6, cuenta("visit"))
+
+    # Lo que el cuaderno no traia entra vacio, no inventado.
+    check("un cliente sin telefono entra sin telefono",
+          conn.execute("SELECT COUNT(*) FROM client WHERE phone IS NULL")
+              .fetchone()[0] == 2)
+    check("un telefono ilegible no se guarda a medias",
+          conn.execute("SELECT phone FROM client WHERE name = 'Sra. Lidia'")
+              .fetchone()[0] is None)
+    check("una mascota sin talla entra sin talla",
+          conn.execute("SELECT COUNT(*) FROM pet WHERE size IS NULL")
+              .fetchone()[0] == 2)
+    check("pero una talla que si venia se conserva",
+          conn.execute("SELECT size FROM pet WHERE name = 'Rocky'")
+              .fetchone()[0] == "medium")
+
+    # El precio del papel se congela en la linea, como cualquier visita.
+    check("cada linea guarda el precio que decia el papel",
+          sorted(r[0] for r in conn.execute(
+              "SELECT price_cents FROM visit_service")) ==
+          [1500, 1500, 1500, 1800, 1800, 2500])
+    # 'any' junto a las de talla no puede quedar: la pantalla de
+    # servicios decide el modo por su ausencia, y al guardar borraria
+    # las de talla sin avisar.
+    check("y el catalogo queda con una fila por talla, sin un 'any' encima",
+          sorted((r["size"], r["price_cents"]) for r in conn.execute(
+              "SELECT size, price_cents FROM service_price")) ==
+          [("large", 2500), ("medium", 1800), ("small", 1500)],
+          [tuple(r) for r in conn.execute(
+              "SELECT size, price_cents FROM service_price")])
+
+    # Esto es lo que hace util el import: el panel de 'a quien escribirle'
+    # funciona desde el primer dia, sin esperar un mes de visitas nuevas.
+    check("el marcador de ultima visita queda sembrado",
+          conn.execute("SELECT COUNT(*) FROM v_pet_last_visit "
+                       "WHERE last_visit_date IS NOT NULL").fetchone()[0] == 5)
+
+    # Historia, no trabajo del sistema: no puede contarse como tal.
+    check("las visitas importadas quedan marcadas como historia",
+          conn.execute("SELECT COUNT(*) FROM visit WHERE source = 'import'")
+              .fetchone()[0] == 6)
+    conn.close()
+
+    print("\nVolver a pasar el mismo cuaderno")
+    r = importar("--commit")
+    conn = sqlite3.connect(db)
+    check("no duplica ni un cliente", cuenta("client") == 4)
+    check("ni una visita", cuenta("visit") == 6)
+    check("ni una linea", cuenta("visit_service") == 6)
+    conn.close()
+    check("y lo dice", "0 clientes" in r.stdout and "0 visitas" in r.stdout)
+
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    app = create_app(Cfg)
+    client = sign_in(app.test_client())
+
+    print("\nEl catalogo importado se puede seguir editando")
+
+    body = client.get("/servicios/").get_data(as_text=True)
+    check("la lista muestra los tres precios, no uno solo",
+          "$15.00" in body and "$18.00" in body and "$25.00" in body, body[-900:])
+
+    body = client.get("/servicios/1/editar").get_data(as_text=True)
+    # 'Por tamanio' se elige por la AUSENCIA de un precio 'any'. Si el
+    # import hubiera dejado los dos, esta pantalla abriria en 'Uno solo'
+    # y el primer guardado borraria la tabla por talla.
+    check("el formulario abre en 'por tamanio', que es como entro",
+          'data-price-block="size" hidden' not in body
+          and 'data-price-block="any" hidden' in body,
+          body[body.find("data-price-block"):][:300])
+    check("y trae los tres precios listos para corregir",
+          'value="15.00"' in body and 'value="18.00"' in body
+          and 'value="25.00"' in body)
+
+    print("\nCobrarle a un perro que entro sin talla")
+
+    conn = sqlite3.connect(db)
+    coco = conn.execute(
+        "SELECT id, client_id FROM pet WHERE size IS NULL LIMIT 1").fetchone()
+    conn.close()
+
+    # Lo que decia el papel la ultima vez es mejor referencia que
+    # cualquier precio de lista: es lo que se le cobro a ESE perro.
+    body = client.get(f"/visitas/nueva/{coco[1]}").get_data(as_text=True)
+    check("el precio que decia el cuaderno queda de referencia",
+          "\u00faltimo cobro" in body and 'value="15.00"' in body, body[:400])
+
+    # Una mascota nueva sin talla no tiene ni historia ni precio de
+    # lista al cual caer: la pantalla lo dice en vez de poner un numero.
+    client.post(f"/clientes/{coco[1]}/mascotas/nueva", data={"name": "Nuevo"})
+    body = client.get(f"/visitas/nueva/{coco[1]}").get_data(as_text=True)
+    check("y sin historia ni talla, no se inventa ninguno",
+          "sin precio de lista" in body, body[-1500:])
+
+    r = client.post(f"/visitas/nueva/{coco[1]}",
+                    data={"pet": [str(coco[0])], "pick": [f"{coco[0]}:1"],
+                          f"price_{coco[0]}_1": "15"})
+    check("se le cobra igual, escribiendo el monto a mano",
+          r.status_code == 302, r.get_data(as_text=True)[:300])
+
+    print("\nEl hueco se ve en la aplicacion")
+
+    body = client.get("/clientes/").get_data(as_text=True)
+    check("el panel dice quien no tiene telefono", "sin tel" in body.lower())
+    check("y ofrece filtrar lo que quedo incompleto",
+          "Datos incompletos" in body, body[:900])
+
+    body = client.get("/clientes/?f=incompletos").get_data(as_text=True)
+    check("el filtro deja solo a los que les falta algo",
+          "Don Pedro" in body and "Sra. Lidia" in body
+          and "Ana Vega" not in body, body[-1200:])
+
+    conn = sqlite3.connect(db)
+    sin_tel = conn.execute(
+        "SELECT id FROM client WHERE phone IS NULL LIMIT 1").fetchone()[0]
+    conn.close()
+    body = client.get(f"/clientes/{sin_tel}").get_data(as_text=True)
+    check("la ficha sin telefono no ofrece un WhatsApp roto",
+          "wa.me/None" not in body and "wa.me/" not in body, body[:700])
+    check("dice cual es el hueco y lleva a taparlo",
+          "Falta el tel" in body)
+
+    # Y taparlo tiene que funcionar: es el flujo de despues de importar.
+    r = client.post(f"/clientes/{sin_tel}/editar",
+                    data={"name": "Don Pedro", "phone": "6777-8899"})
+    check("se le puede agregar el telefono que faltaba", r.status_code == 302,
+          r.get_data(as_text=True)[:300])
+    body = client.get(f"/clientes/{sin_tel}").get_data(as_text=True)
+    check("y entonces si aparece el boton de WhatsApp",
+          "wa.me/50767778899" in body)
+
+
+def run_outreach(db_path):
+    """Escribirle el mismo mensaje a varios, uno por uno."""
+    import re
+    from urllib.parse import unquote
+
+    class Cfg(DevelopmentConfig):
+        DB_PATH = db_path
+        TESTING = True
+        WTF_CSRF_ENABLED = False
+        AUTO_BACKUP = False
+
+    app = create_app(Cfg)
+    client = sign_in(app.test_client())
+
+    client.post("/servicios/nuevo",
+                data={"name": "Bano", "price_mode": "any", "price_any": "20"})
+    gente = [("Ana Vega", "6123-4567", "Rocky", "small", 62),
+             ("Don Pedro", "6111-2222", "Kira", "small", 40),
+             ("Cira Paz", "6333-4444", "Nina", "large", 30),
+             ("Dora Saez", "6555-6666", "Toby", "small", 2)]
+    for n, (nombre, tel, mascota, talla, _) in enumerate(gente, start=1):
+        client.post("/clientes/nuevo", data={"name": nombre, "phone": tel})
+        client.post(f"/clientes/{n}/mascotas/nueva",
+                    data={"name": mascota, "size": talla})
+    # Alguien sin telefono: no puede entrar a un envio.
+    client.post("/clientes/nuevo", data={"name": "Sin Numero"})
+
+    with app.app_context():
+        from app.clock import shift, today
+        from app.database import get_db
+        from app.repos import visits
+        for n, (_, _, _, _, dias) in enumerate(gente, start=1):
+            visits.create(n, shift(today(), -dias), None, [(n, 1, 2000)],
+                          status="completed")
+        get_db().commit()
+
+    print("\nElegir a quienes")
+
+    body = client.get("/clientes/").get_data(as_text=True)
+    check("desde el panel se llega a los envios siempre",
+          "Escribirle a varios" in body)
+
+    body = client.get("/escribir/nuevo?g=escribir").get_data(as_text=True)
+    check("los atrasados son tres", "<strong>3</strong>" in body, body[:900])
+    check("y Dora, que vino hace dos dias, no esta",
+          "Dora" not in body)
+    check("quien no tiene telefono tampoco entra: no hay a donde escribirle",
+          "Sin Numero" not in body)
+
+    # Lo que hace util esto: cruzar dos preguntas. 'Atrasados' Y
+    # 'perro pequenio' es justo la promo de talla chica.
+    body = client.get("/escribir/nuevo?g=escribir&g=pequenos").get_data(as_text=True)
+    check("los filtros se combinan entre si", "<strong>2</strong>" in body)
+    check("Ana y Don Pedro si", "Ana Vega" in body and "Don Pedro" in body)
+    check("Cira Paz no: su perro es grande", "Cira Paz" not in body)
+
+    def cuenta_chip(html, etiqueta):
+        """El numero que la pantalla pone al lado de una pestania."""
+        m = re.search(etiqueta + r"\s*<span class=\"chip-n\">(\d+)</span>",
+                      html, re.S)
+        return int(m.group(1)) if m else None
+
+    panel = client.get("/clientes/").get_data(as_text=True)
+    envios = client.get("/escribir/nuevo").get_data(as_text=True)
+
+    # Es la razon de que los criterios vivan en app/segments.py: si cada
+    # pantalla contara por su cuenta, el dia que cambie el criterio los
+    # dos numeros dejarian de cuadrar y nadie sabria cual creer.
+    check("'Por escribir' da el mismo numero en las dos pantallas",
+          cuenta_chip(panel, "Por escribir") ==
+          cuenta_chip(envios, "Por escribir") == 3,
+          (cuenta_chip(panel, "Por escribir"), cuenta_chip(envios, "Por escribir")))
+
+    # Y donde NO cuadran, es a proposito: Sin Numero no tiene telefono,
+    # asi que el panel lo cuenta y los envios no.
+    check("pero los envios no cuentan a quien no se le puede escribir",
+          cuenta_chip(panel, "Sin visitas") == 1
+          and cuenta_chip(envios, "Sin visitas") == 0,
+          (cuenta_chip(panel, "Sin visitas"), cuenta_chip(envios, "Sin visitas")))
+
+    print("\nEscribir el mensaje una sola vez")
+
+    check("se ve como le llega a una persona de verdad, ya resuelto",
+          "Hola Ana, \u00bfc\u00f3mo est\u00e1 Rocky?" in body, body[:600])
+    check("y con el nombre de pila, no el completo",
+          "Hola Ana Vega" not in body)
+
+    r = client.post("/escribir/nuevo",
+                    data={"g": ["escribir"], "message": "  "})
+    check("un mensaje vacio se rechaza",
+          r.status_code == 400 and "Escribe el mensaje" in r.get_data(as_text=True))
+
+    r = client.post("/escribir/nuevo",
+                    data={"g": ["sin-visitas"], "message": "Hola"})
+    check("y un envio sin destinatarios tambien",
+          r.status_code == 400 and "nadie" in r.get_data(as_text=True).lower())
+
+    MENSAJE = "Hola {cliente}, \u00bftraes a {mascota}? 50% & m\u00e1s"
+    r = client.post("/escribir/nuevo",
+                    data={"g": ["escribir"], "message": MENSAJE,
+                          "name": "Promo de prueba"})
+    check("con destinatarios y mensaje, arranca", r.status_code == 302,
+          r.get_data(as_text=True)[:300])
+    envio = r.headers["Location"]
+
+    print("\nUno por uno, sin perder la cuenta")
+
+    orden = []
+    for paso in range(5):
+        body = client.get(envio).get_data(as_text=True)
+        if "Terminaste" in body:
+            break
+        quien = re.search(r'envio-quien">([^<]+)', body).group(1)
+        orden.append(quien)
+        if paso == 0:
+            enlace = re.search(r'href="(https://wa\.me/[^"]+)"', body).group(1)
+            check("el enlace lleva el numero internacional",
+                  enlace.startswith("https://wa.me/50761234567?text="), enlace[:60])
+            # Un & sin escapar partiria la URL y el mensaje llegaria
+            # cortado a la mitad.
+            texto = unquote(enlace.split("?text=", 1)[1])
+            check("y el mensaje ya escrito, personalizado",
+                  texto == "Hola Ana, \u00bftraes a Rocky? 50% & m\u00e1s", texto)
+            check("la cuenta dice por cual va", "1 de 3" in body, body[:900])
+
+        cid = re.search(r'name="client_id" value="(\d+)"', body).group(1)
+        # Al segundo se le saltea, para separar 'escrito' de 'salteado'.
+        extra = {"skip": "1"} if paso == 1 else {}
+        client.post(envio + "/marcar", data={"client_id": cid, **extra})
+
+    check("van saliendo del mas atrasado al menos",
+          orden == ["Ana Vega", "Don Pedro", "Cira Paz"], orden)
+
+    body = client.get(envio).get_data(as_text=True)
+    check("al final dice cuantos se escribieron", "Terminaste: 2 de 3" in body,
+          body[:600])
+    check("y cuantos se saltearon", "1 salteado" in body)
+
+    print("\nNo se le escribe dos veces a la misma persona")
+
+    with app.app_context():
+        from app.repos import outreach
+        antes = outreach.targets(1)
+        marcas = [(r["name"], r["sent_at"]) for r in antes if r["sent_at"]]
+    # Un doble toque, o el boton de atras, no puede reescribir la hora
+    # ni convertir un salteado en escrito.
+    client.post(envio + "/marcar", data={"client_id": "2"})
+    with app.app_context():
+        from app.repos import outreach
+        despues = outreach.targets(1)
+        check("volver a marcar a un salteado no lo convierte en escrito",
+              [r["skipped_at"] is not None for r in despues if r["client_id"] == 2] == [True])
+        check("ni cambia la hora de quien ya estaba escrito",
+              [(r["name"], r["sent_at"]) for r in despues if r["sent_at"]] == marcas)
+
+    print("\nUn toque errado se puede deshacer")
+
+    # Es la otra mitad de "no pierdas la cuenta": sin rehacer, un dedo
+    # que toca el boton de al lado deja a alguien fuera para siempre.
+    client.post(envio + "/rehacer", data={"client_id": "1"})
+    body = client.get(envio).get_data(as_text=True)
+    check("quien se marco por error vuelve a la cola",
+          "Ana Vega" in body and "Terminaste" not in body, body[:600])
+    check("y la cuenta lo refleja", "3 de 3" in body, body[:900])
+
+    cid = re.search(r'name="client_id" value="(\d+)"', body).group(1)
+    client.post(envio + "/marcar", data={"client_id": cid})
+
+    print("\nEl envio queda registrado")
+
+    body = client.get("/escribir/").get_data(as_text=True)
+    check("aparece en la lista de envios", "Promo de prueba" in body)
+    check("con cuantos de cuantos", "2/3" in body, body[:900])
+    # Un salteado ya se decidio. Marcarlo como pendiente pondria
+    # "faltan 1" en un envio que si termino.
+    check("y sin marcarlo como pendiente: nadie quedo sin tocar",
+          "faltan" not in body, body[:900])
+
+    r = client.post(envio + "/cerrar", follow_redirects=True)
+    check("se puede cerrar", "cerrado" in r.get_data(as_text=True))
+
+    r = client.post(envio + "/eliminar", follow_redirects=True)
+    check("y eliminar", "eliminado" in r.get_data(as_text=True))
+    check("y entonces ya no esta",
+          "Promo de prueba" not in client.get("/escribir/").get_data(as_text=True))
+
+    print("\nY no se le escribe a quien pidio que no")
+
+    with app.app_context():
+        from app.database import get_db
+        get_db().execute(
+            "UPDATE client SET preferred_channel = 'none' WHERE name = 'Ana Vega'")
+        get_db().commit()
+    body = client.get("/escribir/nuevo?g=escribir").get_data(as_text=True)
+    check("queda fuera de los envios", "Ana Vega" not in body, body[:600])
+    check("pero los demas siguen", "Don Pedro" in body)
+
+
 def short_date_of(app, iso, weekday=False):
     with app.app_context():
         from app.labels import short_date
@@ -1212,7 +1642,7 @@ def shift_of(app, iso, days):
 if __name__ == "__main__":
     for runner in (run_flow, run_csrf, run_stats, run_interface,
                    run_schema_guard, run_auto_migrate, run_auth,
-                   run_backups, run_seed):
+                   run_backups, run_seed, run_import, run_outreach):
         path = fresh_db()
         try:
             runner(path)

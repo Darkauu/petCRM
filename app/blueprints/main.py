@@ -14,8 +14,13 @@ def home():
     pend = visits.pending_summary()
     return render_template(
         "main/home.html",
+        hoy=hoy,
         totals=totals,
         pending=pend,
+        # La lista completa, no solo el conteo: quien entra en la maniana
+        # tiene que ver de una a quien le falta cobrarle, y a que hora
+        # se recibio a esa mascota.
+        pending_rows=visits.pending_all(),
         # Una pendiente de un dia anterior no se olvido por un rato:
         # se quedo colgada, y eso se avisa distinto.
         pending_stale=bool(pend["oldest"] and pend["oldest"] < hoy),

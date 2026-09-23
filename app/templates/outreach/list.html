@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Envíos{% endblock %}
+{% block heading %}Envíos{% endblock %}
+{% block back %}<a class="back back-icon" href="{{ url_for('clients.index') }}" aria-label="Volver">{{ icon('atras', 20) }}</a>{% endblock %}
+{% block topaction %}
+  <a class="topaction btn btn-sm" href="{{ url_for('outreach.create') }}">
+    {{ icon('mas', 18) }} Nuevo envío</a>
+{% endblock %}
+
+{% block content %}
+  {% if rows %}
+    <ul class="list">
+      {% for row in rows %}
+        <li class="{{ 'inactive' if row.closed_at }}">
+          <a href="{{ url_for('outreach.send', campaign_id=row.id) }}">
+            <span class="list-title">
+              {{ row.name }}
+              <span class="amount">{{ row.enviados or 0 }}/{{ row.total }}</span>
+            </span>
+            <span class="list-sub">{{ row.message | truncate(70) }}</span>
+            {% if row.faltan %}
+              <span class="tag tag-warn">faltan {{ row.faltan }}</span>
+            {% endif %}
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty">
+      <p>Todavía no has hecho ningún envío.</p>
+      <p class="hint">Sirve para mandarle el mismo mensaje a varios
+         clientes sin escribirlo una y otra vez.</p>
+      <a class="btn" href="{{ url_for('outreach.create') }}">Empezar uno</a>
+    </div>
+  {% endif %}
+
+  <a class="fab" href="{{ url_for('outreach.create') }}"
+     aria-label="Nuevo envío">{{ icon('mas', 26) }}</a>
+{% endblock %}

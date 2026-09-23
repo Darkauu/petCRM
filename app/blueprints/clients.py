@@ -6,27 +6,17 @@ from flask import (Blueprint, flash, redirect, render_template, request,
 
 from app.database import get_db
 from app.forms import clean_client
+from app import segments
 from app.phone import format_phone
 from app.repos import clients, pets, settings, visits
 
 bp = Blueprint("clients", __name__, url_prefix="/clientes")
 
 
-# Cada filtro es una pregunta que el duenio se hace de verdad. La clave
-# de la URL elige una de estas funciones; nada de lo que llega por la
-# peticion entra en una consulta.
-FILTROS = [
-    ("escribir", "Por escribir",
-     lambda r, plazo: r["last_visit_date"] is not None and r["days"] > plazo),
-    ("sin-visitas", "Sin visitas",
-     lambda r, plazo: r["last_visit_date"] is None),
-    ("pequenos", "Perros pequeños",
-     lambda r, plazo: "small" in (r["sizes"] or "")),
-    ("medianos", "Perros medianos",
-     lambda r, plazo: "medium" in (r["sizes"] or "")),
-    ("grandes", "Perros grandes",
-     lambda r, plazo: "large" in (r["sizes"] or "")),
-]
+# Definidos en app/segments.py, que es de donde los lee tambien la
+# pantalla de envios: la misma pregunta tiene que dar el mismo numero
+# en los dos lados.
+FILTROS = segments.PANEL
 
 
 @bp.get("/")
@@ -109,7 +99,7 @@ def create():
         return render_template("clients/form.html", client={}, errors={})
 
     data, errors = clean_client(request.form)
-    if not errors:
+    if not errors and data["phone"]:
         existing = clients.find_by_phone(data["phone"])
         if existing:
             errors["phone"] = (
@@ -142,7 +132,7 @@ def edit(client_id):
         return render_template("clients/form.html", client=client, errors={})
 
     data, errors = clean_client(request.form)
-    if not errors:
+    if not errors and data["phone"]:
         existing = clients.find_by_phone(data["phone"])
         if existing and existing["id"] != client_id:
             errors["phone"] = f"Ese telefono ya es de {existing['name']}."

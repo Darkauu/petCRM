@@ -40,11 +40,16 @@ def clean_client(form):
     if not data["name"]:
         errors["name"] = "El nombre es obligatorio."
 
-    try:
-        e164, display = normalize_phone(form.get("phone"))
-        data["phone"], data["phone_display"] = e164, display
-    except PhoneError as exc:
-        errors["phone"] = str(exc)
+    # Sin telefono se puede guardar: hay fichas que entraron del
+    # cuaderno sin numero, y obligar a poner uno para editar el resto
+    # de la ficha termina en un numero inventado. Lo que no se acepta
+    # es un numero escrito mal, que es peor que ninguno.
+    if (form.get("phone") or "").strip():
+        try:
+            e164, display = normalize_phone(form.get("phone"))
+            data["phone"], data["phone_display"] = e164, display
+        except PhoneError as exc:
+            errors["phone"] = str(exc)
 
     if data["email"] and not _EMAIL_RE.match(data["email"]):
         errors["email"] = "Correo inválido."
@@ -71,7 +76,11 @@ def clean_pet(form, client_id):
     if not data["name"]:
         errors["name"] = "El nombre es obligatorio."
 
-    if data["size"] not in SIZE_KEYS:
+    # Una talla vacia es un hueco visible; una inventada cobra mal el
+    # proximo bano y nadie se entera.
+    if not data["size"]:
+        data["size"] = None
+    elif data["size"] not in SIZE_KEYS:
         errors["size"] = "Elige el tamaño."
 
     if data["species"] not in SPECIES_KEYS:
@@ -142,8 +151,16 @@ def clean_service(form):
 
 
 def clean_visit(form, pet_ids, service_ids, today):
-    """Lineas de la visita: 'pick' trae 'idMascota:idServicio' por cada
-    servicio marcado, y price_<mascota>_<servicio> lo que se cobro.
+    """Lineas de la visita.
+
+    'pet' trae las mascotas elegidas y 'pick' los servicios marcados, con
+    la forma 'idMascota:idServicio'; price_<mascota>_<servicio> lleva lo
+    que se cobro.
+
+    Solo cuentan los servicios de una mascota elegida. Hace falta porque
+    la pantalla esconde los servicios de las mascotas sin elegir, pero
+    los deja en el formulario: si alguien marca un servicio y despues
+    cierra esa mascota, lo marcado no debe cobrarse.
 
     pet_ids y service_ids acotan lo que se acepta, para que un formulario
     manipulado no cuelgue la visita de la mascota de otro cliente.
@@ -162,6 +179,11 @@ def clean_visit(form, pet_ids, service_ids, today):
         except ValueError:
             errors["visit_date"] = "Fecha inválida."
 
+    elegidas = {
+        int(value) for value in form.getlist("pet")
+        if str(value).isdigit() and int(value) in pet_ids
+    }
+
     lines = []
     seen = set()
     for raw in form.getlist("pick"):
@@ -169,7 +191,7 @@ def clean_visit(form, pet_ids, service_ids, today):
             pet_id, service_id = (int(part) for part in raw.split(":", 1))
         except (ValueError, TypeError):
             continue
-        if pet_id not in pet_ids or service_id not in service_ids:
+        if pet_id not in elegidas or service_id not in service_ids:
             continue
         if (pet_id, service_id) in seen:
             continue
@@ -182,6 +204,8 @@ def clean_visit(form, pet_ids, service_ids, today):
             errors[field] = str(exc)
 
     if not lines and not errors:
-        errors["lines"] = "Marca al menos un servicio."
+        errors["lines"] = ("Elige la mascota que atendiste."
+                           if not elegidas else "Marca al menos un servicio.")
 
-    return {"visit_date": visit_date, "notes": notes, "lines": lines}, errors
+    return ({"visit_date": visit_date, "notes": notes, "lines": lines,
+             "pets": elegidas}, errors)

@@ -67,6 +67,12 @@
      class="{{ 'on' if request.blueprint == 'services' }}"
      {{ 'aria-current=page' if request.blueprint == 'services' }}>
     {{ icon('servicios') }}<span>Servicios</span></a>
+  {# Ajustes no se visita a diario: va al final de todo, y en la
+     computadora empujado hasta la esquina de abajo. #}
+  <a class="tab-end {{ 'on' if request.blueprint == 'settings' }}"
+     href="{{ url_for('settings.edit') }}"
+     {{ 'aria-current=page' if request.blueprint == 'settings' }}>
+    {{ icon('ajustes') }}<span>Ajustes</span></a>
 </nav>
 {% endblock %}
 

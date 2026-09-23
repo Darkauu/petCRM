@@ -18,7 +18,10 @@ def parse_money(text):
         raise MoneyError("Monto vacio.")
     raw = _CLEAN.sub("", str(text).strip())
     if not raw:
-        raise MoneyError("Monto vacio.")
+        # Con el texto original: 'Monto vacio' a secas es desconcertante
+        # cuando lo que se escribio fue 'quince dolares'.
+        limpio = str(text).strip()
+        raise MoneyError(f"Monto invalido: {limpio}" if limpio else "Monto vacio.")
 
     # Formato local: coma como decimal si no hay punto.
     if "," in raw and "." not in raw:

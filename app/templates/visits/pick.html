@@ -29,7 +29,8 @@
             <a href="{{ url_for('visits.create', client_id=row.id) }}">
               <span class="list-title">{{ row.name }}</span>
               <span class="list-sub">
-                {{ row.pet_names or row.phone_display or (row.phone | phone) }}
+                {{ row.pet_names or row.phone_display or (row.phone | phone)
+                   or 'sin teléfono' }}
               </span>
             </a>
           </li>

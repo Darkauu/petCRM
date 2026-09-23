@@ -27,12 +27,22 @@
       {% for key, label in SIZES %}
         <label class="pill">
           <input type="radio" name="size" value="{{ key }}"
-                 {{ 'checked' if pet.size == key }} required>
+                 {{ 'checked' if pet.size == key }}>
           <span>{{ label }}</span>
         </label>
       {% endfor %}
+      {# 'No sé' existe para poder decirlo y para poder volver atrás:
+         con tres opciones y un radio, una talla puesta por error no
+         se puede quitar nunca más. #}
+      <label class="pill">
+        <input type="radio" name="size" value=""
+               {{ 'checked' if not pet.size }}>
+        <span>No sé</span>
+      </label>
     </div>
-    {% if errors.size %}<em>{{ errors.size }}</em>{% endif %}
+    {% if errors.size %}<em>{{ errors.size }}</em>
+    {% else %}<em class="ayuda">De aquí sale el precio sugerido del baño.</em>
+    {% endif %}
   </fieldset>
 
   <label class="field">

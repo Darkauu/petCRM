@@ -17,6 +17,7 @@ import argparse
 import contextlib
 import io
 import logging
+import re
 import sqlite3
 import sys
 import tempfile
@@ -67,8 +68,14 @@ def seeded_app():
     client.post("/clientes/2/mascotas/nueva", data={"name": "Kira", "size": "medium"})
     client.post("/servicios/nuevo",
                 data={"name": "Bano", "price_mode": "any", "price_any": "20"})
+    client.post("/servicios/nuevo",
+                data={"name": "Corte", "price_mode": "any", "price_any": "15"})
     client.post("/visitas/nueva/1",
-                data={"pick": ["1:1"], "price_1_1": "20", "charge": "1"})
+                data={"pet": ["1"], "pick": ["1:1"], "price_1_1": "20",
+                      "charge": "1"})
+    # Una sin cobrar, para ver la lista del inicio.
+    client.post("/visitas/nueva/2",
+                data={"pet": ["3"], "pick": ["3:1"], "price_3_1": "20"})
 
     # Alguien atrasado, para poder ver el boton de WhatsApp en la lista.
     with app.app_context():
@@ -86,6 +93,23 @@ def seeded_app():
             "is_active": 1})
         visits.create(cira, shift(today(), -40), None,
                       [(nina, 1, 2000)], status="completed")
+
+        # Dos mas atrasados: un envio de uno solo no probaria que la
+        # pantalla avanza al siguiente.
+        for nombre, tel, mascota, dias in (
+                ("Elsa Mora", "+50760077788", "Pelusa", 35),
+                ("Fabio Ruiz", "+50760099900", "Bruno", 22)):
+            cid = clients.create({
+                "name": nombre, "phone": tel, "phone_display": None,
+                "document": None, "email": None, "address": None,
+                "notes": None})
+            pid = pets.create({
+                "client_id": cid, "name": mascota, "species": "dog",
+                "breed": None, "size": "medium", "sex": None,
+                "birthdate": None, "weight_kg": None, "temperament": None,
+                "medical_notes": None, "is_active": 1})
+            visits.create(cid, shift(today(), -dias), None,
+                          [(pid, 1, 2000)], status="completed")
         get_db().commit()
     return app
 
@@ -176,6 +200,150 @@ def run(page, url):
         check("y la etiqueta no se sale de su caja",
               not caja["desborda"], caja)
         check("sigue siendo tocable con el pulgar", caja["alto"] >= 44, caja)
+
+    print("\nPrimero la mascota, despues sus servicios")
+    page.goto(f"{url}/visitas/nueva/1")     # Marta Rios: Toby y Luna
+    servicios = page.locator(".pet-services").first
+    check("con dos mascotas, los servicios arrancan escondidos",
+          not servicios.is_visible())
+    check("y se ven las dos mascotas para elegir",
+          page.locator(".pet-face").count() == 2)
+    page.click(".pet-face >> nth=0")
+    page.wait_for_timeout(200)
+    check("al elegir una, aparecen SUS servicios", servicios.is_visible())
+    check("los de la otra siguen escondidos",
+          not page.locator(".pet-services").nth(1).is_visible())
+    check("y se abre sin una sola linea de JS",
+          page.evaluate("document.querySelector('.pet-check').checked") is True)
+
+    # El total en vivo tiene que decir lo mismo que va a guardar el
+    # servidor: los servicios de una mascota cerrada no cuentan.
+    abierta = page.locator(".pet-card").first
+    abierta.locator(".line-face").first.click()
+    abierta.locator("[data-amount]").first.fill("30")
+    page.wait_for_timeout(150)
+    check("el total suma lo marcado de la mascota abierta",
+          page.inner_text("[data-total]") == "$30.00",
+          page.inner_text("[data-total]"))
+    page.click(".pet-face >> nth=0")        # se cierra sin desmarcar
+    page.wait_for_timeout(150)
+    check("al cerrarla, su servicio deja de contar",
+          page.inner_text("[data-total]") == "$0.00",
+          page.inner_text("[data-total]"))
+    check("pero no se pierde lo escrito: vuelve al reabrirla",
+          abierta.locator(".line-check").first.is_checked())
+
+    page.goto(f"{url}/visitas/nueva/2")     # Beto Lima: solo Kira
+    check("con una sola mascota ya viene abierta",
+          page.locator(".pet-services").first.is_visible())
+
+    # Al corregir una visita ya guardada se abre la mascota que si
+    # vino, no las dos: si no, la correccion arranca mintiendo.
+    page.goto(f"{url}/visitas/1/editar")    # Marta: se atendio a Toby
+    abiertas = page.evaluate(
+        "() => [...document.querySelectorAll('.pet-card')]"
+        "  .filter(c => c.querySelector('.pet-check').checked)"
+        "  .map(c => c.querySelector('.pet-name').innerText.split('\\n')[0].trim())")
+    check("al corregir, se abre la mascota que si se atendio",
+          abiertas == ["Toby"], abiertas)
+
+    print("\nEl inicio abre con lo que falta cobrar")
+    page.goto(f"{url}/")
+    texto = page.inner_text("body")
+    check("hay una raya que separa las acciones de la deuda",
+          page.locator("main hr").count() == 1)
+    check("y debajo la lista de pendientes", "Pendientes de cobro" in texto)
+    fila = page.locator(".list li.is-pending").first
+    check("con el nombre de quien falta por cobrar",
+          "Beto Lima" in fila.inner_text(), fila.inner_text())
+    import re as _re
+    check("y la hora a la que se recibio la mascota",
+          _re.search(r"\d\d:\d\d", fila.inner_text()) is not None,
+          fila.inner_text())
+    orden = page.evaluate(
+        "() => { const hr = document.querySelector('main hr');"
+        "  const nuevo = [...document.querySelectorAll('.stack .btn')]"
+        "    .find(e => e.innerText.includes('Nuevo cliente'));"
+        "  return nuevo && (hr.compareDocumentPosition(nuevo) & 2) > 0; }")
+    check("la raya va debajo de 'Nuevo cliente'", orden is True)
+
+    print("\nNada pegado al borde de una lista")
+    page.goto(f"{url}/clientes/1")
+    hueco = page.evaluate(
+        "() => { const b = [...document.querySelectorAll('.btn')]"
+        "   .find(e => e.innerText.includes('Agregar mascota'));"
+        "  const ul = b.previousElementSibling;"
+        "  return Math.round(b.getBoundingClientRect().top"
+        "                    - ul.getBoundingClientRect().bottom); }")
+    check("'Agregar mascota' no toca la lista de mascotas", hueco >= 8, hueco)
+
+    print("\nLos datos del cliente se leen en la ficha")
+    page.goto(f"{url}/clientes/3")          # Cira Paz, sin datos extra
+    check("si no hay datos extra, no hay caja vacia",
+          page.locator(".datos").count() == 0)
+    page.goto(f"{url}/clientes/1/editar")
+    page.evaluate("document.querySelector('details.more').open = true")
+    page.fill("input[name=document]", "8-123-456")
+    page.fill("input[name=address]", "Via Espania, casa 4")
+    page.click("button[type=submit]")
+    page.wait_for_url("**/clientes/1", timeout=5000)
+    datos = page.locator(".datos").inner_text()
+    check("la cedula se ve al entrar, sin abrir el editor",
+          "8-123-456" in datos, datos)
+    check("y la direccion tambien", "Via Espania" in datos, datos)
+
+    print("\nEscribirle a varios: la vista previa en vivo")
+    page.goto(f"{url}/escribir/nuevo?g=escribir")
+    campo = page.locator("[data-plantilla]")
+    vista = page.locator("[data-vista]")
+    check("hay alguien a quien escribirle", vista.count() == 1)
+    campo.fill("Hola {cliente}, traele a {mascota} el jueves")
+    page.wait_for_timeout(200)
+    texto = vista.inner_text()
+    check("el mensaje se resuelve mientras se escribe",
+          "{cliente}" not in texto and "{mascota}" not in texto, texto)
+    check("con el nombre de pila de una persona de verdad",
+          texto.startswith("Hola Cira,"), texto)
+
+    # Tocar un filtro no puede costar el mensaje ya escrito: se manda el
+    # formulario entero, no una URL nueva.
+    page.click(".chip-check:has-text('Perros grandes') span")
+    page.wait_for_load_state("networkidle")
+    check("cambiar un filtro no borra lo que ya se escribio",
+          "el jueves" in page.locator("[data-plantilla]").input_value(),
+          page.locator("[data-plantilla]").input_value())
+
+    print("\nEscribirle a varios: un toque en vez de dos")
+    page.goto(f"{url}/escribir/nuevo?g=escribir")
+    page.fill("[data-plantilla]", "Hola {cliente}")
+    page.click("button[type=submit]")
+    page.wait_for_url(re.compile(r"/escribir/\d+$"), timeout=5000)
+
+    primero = page.locator(".envio-quien").inner_text()
+    enlace = page.locator("[data-abrir]")
+    check("el chat se abre en otra pestania, no encima del sistema",
+          enlace.get_attribute("target") == "_blank"
+          and "noopener" in (enlace.get_attribute("rel") or ""))
+    check("y el enlace ya lleva el mensaje escrito",
+          "?text=Hola%20" in enlace.get_attribute("href"),
+          enlace.get_attribute("href"))
+
+    # Al tocar el enlace: se abre WhatsApp en otra pestania Y esta
+    # avanza sola al siguiente. Sin JS haria falta el segundo boton.
+    with page.context.expect_page() as nueva:
+        enlace.click()
+    chat = nueva.value
+    # Solo que la pestania se abrio: si de verdad carga wa.me depende
+    # de que haya internet, y eso no es lo que se esta probando aqui.
+    check("tocar abre de verdad una pestania nueva", chat is not None)
+    chat.close()
+    page.wait_for_url(re.compile(r"/escribir/\d+$"), timeout=5000)
+    page.wait_for_timeout(600)
+    segundo = page.locator(".envio-quien").inner_text()
+    check("y la pantalla ya paso sola al siguiente",
+          segundo != primero, f"{primero} -> {segundo}")
+    check("la cuenta lo refleja", "2 de 3" in page.inner_text(".avance-txt"),
+          page.inner_text(".avance-txt"))
 
     print("\nDia y noche")
     page.goto(f"{url}/resumen/")
@@ -297,6 +465,12 @@ def run_responsive(browser, url):
           nav["y"] > 500, nav)
     check("ocupa todo el ancho", nav["w"] == 390, nav)
     check("el boton flotante esta a mano", caja(page, ".fab")["visible"])
+    tabs = page.evaluate("""() => [...document.querySelectorAll('.tabbar a')]
+      .map(a => { const s = a.querySelector('span');
+        return {texto: s.innerText,
+                desborda: s.scrollWidth > a.clientWidth + 1}; })""")
+    check("las seis pestanias caben sin partir su etiqueta",
+          len(tabs) == 6 and not any(t["desborda"] for t in tabs), tabs)
     check("y la accion de arriba se esconde",
           not caja(page, ".topaction")["visible"])
 
@@ -330,6 +504,20 @@ def run_responsive(browser, url):
     check("el boton flotante desaparece", not caja(page, ".fab")["visible"])
     check("la accion sube junto al titulo",
           caja(page, ".topaction")["visible"])
+
+    ajustes = caja(page, ".tabbar .tab-end")
+    ultima = page.evaluate(
+        "() => { const a = [...document.querySelectorAll('.tabbar a')];"
+        "  return a[a.length - 1].classList.contains('tab-end'); }")
+    check("Ajustes queda en la esquina de abajo a la izquierda",
+          ultima and ajustes["x"] < 40 and ajustes["y"] + ajustes["h"] > 740,
+          ajustes)
+    check("con su engranaje y su nombre escrito",
+          page.locator(".tabbar .tab-end svg").count() == 1
+          and "Ajustes" in page.inner_text(".tabbar .tab-end"))
+    check("y esta separada del ultimo apartado del dia a dia",
+          ajustes["y"] - (caja(page, ".tabbar a:nth-of-type(5)")["y"] + 44) > 100,
+          ajustes)
 
     contenido = caja(page, ".wrap")
     izquierda = contenido["x"] - nav["w"]
