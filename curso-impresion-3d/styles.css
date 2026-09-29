@@ -1,0 +1,315 @@
+/* Dexel Studio — Curso 01 / Impresión 3D
+   Deck de clase. Todo local: fuentes, three.js y estilos viajan con la carpeta. */
+
+@font-face { font-family: "Archivo"; font-weight: 600; font-display: block; src: url("vendor/fonts/archivo-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Archivo"; font-weight: 800; font-display: block; src: url("vendor/fonts/archivo-latin-800-normal.woff2") format("woff2"); }
+@font-face { font-family: "Archivo"; font-weight: 900; font-display: block; src: url("vendor/fonts/archivo-latin-900-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; font-display: block; src: url("vendor/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); }
+
+/* ------------------------------------------------------------------
+   Paleta por rol. Cada tono se sombrea hacia su propio vecino, nunca
+   hacia el acento.
+
+   Presupuesto de contraste (WCAG 2.x, medido):
+     paper  #EFEEE8 sobre ink    #3C0016  15.0 : 1   texto principal
+     paper  #EFEEE8 sobre ink-deep #2A000F 16.3 : 1
+     peach  #D1C0A5 sobre ink     9.8 : 1   microtipo, texto secundario
+     peach-shade #B8A584 sobre ink 7.3 : 1  solo microtipo de apoyo
+     accent #F92424 sobre ink     4.4 : 1   NO pasa AA en texto pequeño:
+                                            el acento nunca es texto aquí;
+                                            solo láser, marcas y geometría.
+     ink    #3C0016 sobre paper  15.0 : 1
+     accent-shade #C8141B sobre paper 5.1 : 1  (texto pequeño sobre papel
+                                            usa esta tinta, no el acento)
+   Piso de sala: nada de texto por debajo de 7 : 1 en la diapositiva,
+   porque la gamma del proyector aplasta los tonos medios.
+   ------------------------------------------------------------------ */
+:root {
+  --ink: #3C0016;
+  --ink-deep: #2A000F;
+  --accent: #F92424;
+  --accent-shade: #C8141B;
+  --peach: #D1C0A5;
+  --peach-shade: #B8A584;
+  --paper: #EFEEE8;
+  --paper-shade: #DCDAD0;
+  --signal: rgb(61, 255, 110); /* reservado: palabras voxel retro. Nunca UI. */
+
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Puntero normalizado (-1..1), amortiguado; lo escribe el reloj único. */
+  --px: 0;
+  --py: 0;
+
+  --gutter: clamp(16px, 3.2vw, 64px);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--f-display);
+  font-weight: 600;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ---------- capa WebGL: un solo canvas para toda la página ---------- */
+#gl {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
+html:not(.has-3d) #gl { display: none; }
+
+/* ---------- microtipo: la firma ---------- */
+.micro {
+  font-family: var(--f-mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: clamp(11px, 0.95vw, 17px);
+  line-height: 1.3;
+  color: var(--peach);
+  margin: 0;
+}
+.micro b { color: var(--paper); font-weight: 500; }
+.micro .dot {
+  display: inline-block;
+  width: 0.62em; height: 0.62em;
+  background: var(--accent);
+  margin-right: 0.6em;
+  vertical-align: 0.02em;
+}
+
+/* ---------- deck ---------- */
+.deck { position: relative; z-index: 1; height: 100%; }
+
+.slide {
+  position: absolute;
+  inset: 0;
+  display: none;
+  grid-template-rows: auto minmax(0, 31fr) auto minmax(0, 57fr) auto;
+  row-gap: clamp(8px, 1.4vh, 20px);
+  padding: clamp(14px, 2.6vh, 36px) var(--gutter);
+  background: var(--ink);
+  overflow: hidden;
+}
+.slide.is-current { display: grid; }
+/* Con el campo vivo, el shader pinta el fondo: la sección suelta su color. */
+html.has-3d .slide { background: transparent; }
+
+.slide-meta, .slide-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1em;
+}
+.slide-status .micro:last-child { text-align: right; }
+
+/* ---------- título de sección (voxel) ---------- */
+.title-zone {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+}
+.title-zone .eyebrow { position: absolute; top: 0; left: 0; }
+.voxel-title {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 0.98; /* las tildes de mayúscula necesitan este aire */
+  letter-spacing: -0.01em;
+  font-size: clamp(40px, min(7.4vw, 11vh), 170px);
+  color: var(--paper);
+  /* Fallback sin WebGL: relieve apilado, bloque sólido que se despega del fondo. */
+  text-shadow:
+    1px 1px 0 var(--peach), 2px 2px 0 var(--peach), 3px 3px 0 var(--peach-shade),
+    4px 4px 0 var(--peach-shade), 5px 5px 0 var(--peach-shade), 6px 6px 0 var(--ink-deep),
+    10px 14px 18px rgba(0, 0, 0, 0.45);
+}
+.voxel-title .line { display: block; }
+/* Con el 3D montado el texto real queda para lectores de pantalla y buscar. */
+html.has-3d .voxel-title { color: transparent; text-shadow: none; }
+
+/* ---------- subtítulo 2.5D ---------- */
+.subtitle {
+  margin: 0;
+  font-weight: 800;
+  font-size: clamp(24px, min(3.4vw, 5.6vh), 72px);
+  line-height: 1;
+  letter-spacing: -0.015em;
+  color: var(--paper);
+  /* Está un plano por delante del fondo: se desplaza más que el resto
+     y su sombra tenue cae hacia el lado contrario del puntero. */
+  transform: translate3d(calc(var(--px) * -10px), calc(var(--py) * -6px), 0);
+  text-shadow:
+    calc(2px + var(--px) * 4px) calc(3px + var(--py) * 3px) 0 rgba(20, 0, 7, 0.55),
+    calc(6px + var(--px) * 10px) calc(10px + var(--py) * 8px) 22px rgba(10, 0, 4, 0.55);
+  will-change: transform;
+}
+.subtitle em { font-style: normal; color: var(--peach); font-weight: 600; }
+.subtitle .micro { display: block; margin-bottom: 0.7em; }
+
+/* ---------- comparación ---------- */
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(16px, 3vw, 64px);
+  min-height: 0;
+}
+.demo {
+  margin: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+.stage {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+.stage svg { width: 100%; height: 100%; max-height: 100%; }
+html.has-3d .stage svg { visibility: hidden; }
+
+/* Etiqueta que sigue a la pieza que se mueve, y se va cuando se detiene. */
+.tag {
+  position: absolute;
+  left: 0; top: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  padding-left: 14px;
+  border-left: 2px solid var(--peach);
+}
+.tag.is-on { opacity: 1; }
+html:not(.has-3d) .tag { display: none; }
+
+.demo figcaption {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.8em;
+  align-items: baseline;
+  border-top: 2px solid var(--peach-shade);
+  padding-top: clamp(8px, 1.2vh, 16px);
+}
+.demo h3 {
+  margin: 0;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: clamp(22px, min(2.9vw, 4.8vh), 60px);
+  line-height: 0.9;
+  letter-spacing: -0.01em;
+}
+.demo .index { align-self: start; padding-top: 0.35em; }
+.demo .body {
+  grid-column: 1 / -1;
+  margin: 0.45em 0 0.5em;
+  max-width: 42ch;
+  font-weight: 600;
+  font-size: clamp(15px, min(1.45vw, 2.5vh), 30px);
+  line-height: 1.22;
+  color: var(--paper);
+}
+.demo .live { grid-column: 1 / -1; }
+
+/* ---------- controles del presentador ---------- */
+.controls {
+  position: fixed;
+  right: var(--gutter);
+  bottom: clamp(44px, 7vh, 80px);
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+  transition: opacity 0.5s ease;
+}
+.controls.is-idle { opacity: 0; pointer-events: none; }
+.controls button {
+  font: inherit;
+  font-family: var(--f-mono);
+  font-size: 15px;
+  width: 44px; height: 44px;
+  border: 2px solid var(--peach);
+  background: var(--ink-deep);
+  color: var(--paper);
+  cursor: pointer;
+}
+.controls button:hover, .controls button:focus-visible { background: var(--paper); color: var(--ink); outline: none; }
+.controls button:disabled { opacity: 0.35; cursor: default; }
+
+.blank {
+  position: fixed; inset: 0; z-index: 10;
+  background: var(--ink-deep);
+  display: none;
+}
+html.is-blank .blank { display: block; }
+
+/* ---------- arranque: sostenido en la carga real de fuentes ---------- */
+.boot {
+  position: fixed; inset: 0; z-index: 20;
+  background: var(--ink);
+  display: grid;
+  place-items: center;
+  transition: opacity 0.6s ease, visibility 0s linear 0.6s;
+}
+html.is-ready .boot { opacity: 0; visibility: hidden; }
+html:not(.is-ready) .deck { visibility: hidden; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+/* ---------- pantallas estrechas / verticales ---------- */
+@media (max-aspect-ratio: 1/1), (max-width: 760px) {
+  body { overflow: auto; }
+  .deck { height: auto; }
+  .slide {
+    position: relative;
+    min-height: 100svh;
+    grid-template-rows: auto 30svh auto auto auto;
+  }
+  .compare { grid-template-columns: 1fr; }
+  .stage { height: 34svh; }
+  .controls { bottom: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtitle { transform: none; }
+  .boot, .tag, .controls { transition: none; }
+}
+
+/* ---------- impresión: una diapositiva por página, estado final ---------- */
+@page { size: 1600px 900px; margin: 0; }
+@media print {
+  html, body { height: auto; overflow: visible; background: var(--ink); }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #gl, .controls, .boot, .blank, .tag { display: none !important; }
+  .deck { visibility: visible !important; height: auto; }
+  .slide {
+    display: grid !important;
+    position: relative;
+    width: 1600px; height: 900px;
+    background: var(--ink) !important;
+    break-after: page;
+  }
+  .voxel-title {
+    color: var(--paper) !important;
+    text-shadow: 1px 1px 0 var(--peach), 2px 2px 0 var(--peach), 3px 3px 0 var(--peach-shade),
+      4px 4px 0 var(--peach-shade), 5px 5px 0 var(--peach-shade), 6px 6px 0 var(--ink-deep) !important;
+  }
+  .stage svg { visibility: visible !important; }
+  .subtitle { transform: none; }
+}

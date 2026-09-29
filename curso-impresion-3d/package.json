@@ -1,0 +1,12 @@
+{
+  "name": "dexel-curso-impresion-3d",
+  "private": true,
+  "description": "Dexel Studio — Curso 01: Impresión 3D (deck de clase)",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --minify --target=es2019 --alias:three=./vendor/three.module.min.js --outfile=dist/deck.js",
+    "watch": "npm run build -- --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
